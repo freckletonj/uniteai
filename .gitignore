@@ -1,0 +1,16 @@
+# Python
+.env/
+__pycache__/
+
+# Config
+config.yml
+
+# Secrets
+.secret.yml
+.secrets.yml
+.secret.yaml
+.secrets.yaml
+
+# Misc
+sandbox/
+test.llm
