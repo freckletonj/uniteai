@@ -36,27 +36,30 @@ import yaml
 # Initialization
 
 ##########
-# Misc Params
-LSP_PORT = 5033
-LLM_PORT = 8000
-LLM_URI = f'http://localhost:{LLM_PORT}'
-LLM_MAX_LENGTH = 1000
-TOP_K = 10
-
-# For converting jsonified things into proper instances. This is necessary when
-# a CodeAction summons a Command, and passes raw JSON to it.
-converter = default_converter()
-
-# OpenAI
-OPENAI_MAX_LENGTH = 300
-
-
-##########
-# OpenAI Config
+# OpenAI Secrets
 
 with open(".secret.yml", 'r') as file:
     secrets = yaml.safe_load(file)
 openai.api_key = secrets["OPENAI_API_KEY"]
+
+##########
+# Configuration
+
+with open("config.yml", 'r') as file:
+    config = yaml.safe_load(file)
+
+    # OpenAI
+    OPENAI_COMPLETION_ENGINE = config['openai_completion_engine']
+    OPENAI_CHAT_ENGINE = config['openai_chat_engine']
+    OPENAI_MAX_LENGTH = config['openai_max_length']
+
+    # Local LLM
+    LOCAL_MAX_LENGTH = config['local_max_length']
+
+    LSP_PORT = config['lsp_port']
+    LLM_PORT = config['llm_port']
+    LLM_URI = config['llm_uri']
+    TOP_K = config['top_k']
 
 
 ##########
@@ -122,6 +125,10 @@ def extract_range(doc: str, range: Range) -> str:
 ##################################################
 # Local LLM
 
+# For converting jsonified things into proper instances. This is necessary when
+# a CodeAction summons a Command, and passes raw JSON to it.
+converter = default_converter()
+
 @server.thread()  # multi-threading unblocks emacs
 @server.command('command.localLlmStream')
 def local_llm_stream(ls: Server, args):
@@ -143,7 +150,7 @@ def local_llm_stream(ls: Server, args):
         try:
             request_data = {
                 "text": input_text,
-                "max_length": LLM_MAX_LENGTH,
+                "max_length": LOCAL_MAX_LENGTH,
                 "do_sample": True,
                 "top_k": TOP_K,
                 "num_return_sequences": 1
@@ -322,8 +329,8 @@ def code_action(params: CodeActionParams) -> List[CodeAction]:
             command=Command(
                 title='Local LLM',
                 command='command.openaiAutocompleteStream',
-                # Note: these arguments get jsonified, not passed directly
-                arguments=[text_document, range, "text-davinci-002", OPENAI_MAX_LENGTH]
+                # Note: these arguments get jsonified, not passed as python objs
+                arguments=[text_document, range, OPENAI_COMPLETION_ENGINE, OPENAI_MAX_LENGTH]
             )
         ),
 
@@ -334,8 +341,8 @@ def code_action(params: CodeActionParams) -> List[CodeAction]:
             command=Command(
                 title='Local LLM',
                 command='command.openaiAutocompleteStream',
-                # Note: these arguments get jsonified, not passed directly
-                arguments=[text_document, range, "gpt-3.5-turbo", OPENAI_MAX_LENGTH]
+                # Note: these arguments get jsonified, not passed as python objs
+                arguments=[text_document, range, OPENAI_CHAT_ENGINE, OPENAI_MAX_LENGTH]
             )
         ),
 
