@@ -61,7 +61,14 @@ with open("config.yml", 'r') as file:
     LLM_URI = config['llm_uri']
     TOP_K = config['top_k']
 
-
+# A sentinel to be used by LSP clients when calling commands. If a CodeAction is
+# called (from a dropdown in the text editor), params are defined in the python
+# function here. If a Command is called (IE a key sequence), the editor provides
+# the values. But if we want the client to defer to the LSP server's config, use
+# this sentinel.
+FROM_CONFIG = 'FROM_CONFIG'
+FROM_CONFIG_CHAT = 'FROM_CONFIG_CHAT'
+FROM_CONFIG_COMPLETION = 'FROM_CONFIG_COMPLETION'
 ##########
 # Logging
 
@@ -230,6 +237,7 @@ CHAT_ENGINES = [
 
 
 def openai_autocomplete(engine, text, max_length):
+    print(f"AND THE ENGINE IS: {engine}")
     if engine in COMPLETION_ENGINES:
         response = openai.Completion.create(
           engine=engine,
@@ -262,11 +270,26 @@ def openai_autocomplete_stream(ls: Server, args):
 
     text_document = converter.structure(args[0], TextDocumentIdentifier)
     range = converter.structure(args[1], Range)
-    engine = args[2]
-    max_length = args[3]
-    uri = text_document.uri
+
+    # Check for sentinel values to allow LSP client to defer arguments to
+    # server's configuration.
+
+    # Engine
+    if args[2] == FROM_CONFIG_CHAT:
+        engine = OPENAI_CHAT_ENGINE
+    elif args[2] == FROM_CONFIG_COMPLETION:
+        engine = OPENAI_COMPLETION_ENGINE
+    else:
+        engine = args[2]
+
+    # Max Length
+    if args[3] == FROM_CONFIG:
+        max_length = OPENAI_MAX_LENGTH
+    else:
+        max_length = args[3]
 
     # Get the document
+    uri = text_document.uri
     doc = ls.workspace.get_document(uri).source
 
     # Extract the highlighted region
