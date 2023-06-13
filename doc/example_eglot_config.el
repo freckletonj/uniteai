@@ -1,5 +1,47 @@
 ;; ADD TO init.el
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; LLM Mode
+;;
+;; This is only useful at the current stage of development, and should be
+;; removed once `lsp-mode` is integrated and allows concurrent LSPs per each
+;; buffer.
+
+(define-derived-mode llm-mode fundamental-mode "llm"
+  "A mode for llm files."
+  (setq-local comment-start "#")
+  (setq-local comment-start-skip "#+\\s-*")
+  )
+
+(defvar llm-mode-map
+  (let ((map (make-sparse-keymap)))
+    map)
+  "Keymap for `llm-mode'.")
+
+(defvar llm-mode-hook nil)
+
+(provide 'llm-mode)
+
+(add-to-list 'auto-mode-alist '("\\.llm\\'" . llm-mode))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; EGlot
+
+(use-package eglot
+  :ensure t
+  :hook
+  (eglot--managed-mode . company-mode)
+  :init
+  ;; Tell eglot not to ask if you're ok with the server modifying the document.
+  (setq eglot-confirm-server-initiated-edits nil)
+  :config
+  (define-key eglot-mode-map (kbd "M-'") 'eglot-code-actions))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; LLM Mode
+
 (add-to-list 'load-path (expand-file-name "~/_/llmpal/"))
 
 (require 'llm-mode)
