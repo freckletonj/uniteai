@@ -1,2 +1,16 @@
+# OpenAI
+openai_completion_engine: 'text-davinci-002'
+openai_chat_engine: 'gpt-3.5-turbo'
+# openai_chat_engine: 'gpt-4'
+openai_max_length: 1000
+
+# Local Model
 model_path: '/home/me/path/to/falcon-7b-instruct/'
-model_commit: ''
+model_commit: 'Unfortunately, Transformers doesnt actually dbl check this, but should.'
+local_max_length: 1000
+top_k: 10
+llm_port: 8000
+llm_uri: 'http://localhost:8000'
+
+# LSP
+lsp_port: 5033
