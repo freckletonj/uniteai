@@ -39,6 +39,69 @@
   (define-key eglot-mode-map (kbd "M-'") 'eglot-code-actions))
 
 
+;;;;;;;;;;
+;; Marker Test
+
+(defvar-local my-global-marker nil)
+
+(defun my-initialize-marker ()
+  "Set the global marker to the beginning of the buffer."
+  (setq my-global-marker (point-min-marker)))
+
+(add-hook 'find-file-hook 'my-initialize-marker)
+
+(defvar-local my-marker-overlay nil
+  "Overlay for the marker set by `marker-set-command'.")
+
+(defun get-marker-column (marker)
+  "Get column number of a marker"
+  (save-excursion
+    (goto-char marker)
+    (current-column)))
+
+(defun marker-update-command()
+  (interactive)
+  ;; Report marker
+  (let* ((doc (eglot--TextDocumentIdentifier))
+         (line (line-number-at-pos my-global-marker))
+         (character (get-marker-column my-global-marker))
+         (params `(:emacsMarker (:line ,line :character ,character))))
+    (eglot-execute-command (eglot--current-server-or-lose) 'command.markerSet (vector doc params)))
+
+  ;; Remove the old overlay, if any
+  (when (overlayp my-marker-overlay)
+    (delete-overlay my-marker-overlay))
+
+  ;; Create a new overlay at the marker's position
+  (let ((marker-pos (marker-position my-global-marker)))
+    (setq my-marker-overlay (make-overlay marker-pos (1+ marker-pos)))
+    (overlay-put my-marker-overlay 'face 'highlight))
+  )
+
+(defun marker-set-command ()
+  "Send an Emacs marker to the LSP server."
+  (interactive)
+  (setq my-global-marker (point-marker))
+  (marker-update-command))
+
+(defun marker-get-command ()
+  "Get the Emacs marker from the LSP server."
+  (interactive)
+  (let* ((doc (eglot--TextDocumentIdentifier))
+         (marker my-global-marker)
+         (line (line-number-at-pos marker))
+         (character (current-column))
+         (params `(:emacsMarker (:line ,line :character ,character))))
+    (eglot-execute-command (eglot--current-server-or-lose) 'command.markerGet (vector doc params))))
+
+(defun my-after-change-function (begin end length)
+  "Call `marker-set-command' if the current buffer is managed by Eglot."
+  (when (bound-and-true-p eglot--managed-mode)
+    (marker-update-command)))
+
+(add-hook 'after-change-functions #'my-after-change-function)
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; LLM Mode
 
@@ -85,6 +148,37 @@
   (interactive)
   (eglot-execute-command (eglot--current-server-or-lose) 'command.localLlmStreamStop '()))
 
+(defun eglot-code-action-transcribe-stream ()
+  (interactive)
+  (let* ((server (eglot--current-server-or-lose))
+         (doc (eglot--TextDocumentIdentifier)))
+    (eglot-execute-command server 'command.transcribeStream (vector doc))))
+
+(defun eglot-code-action-stop-transcribe-stream ()
+  (interactive)
+  (eglot-execute-command (eglot--current-server-or-lose) 'command.stopTranscribeStream '()))
+
+
+
+(defun my-call-sample-command ()
+  "Send an Emacs marker to the LSP server."
+  (interactive)
+  (let* ((marker (point-marker))
+         (line (line-number-at-pos marker))
+         (character (current-column))
+         (params `(:emacsMarker (:line ,line :character ,character))))
+    (jsonrpc-async-request (eglot--current-server-or-lose)
+                           :sampleCommand
+                           params
+                           :success-fn (lambda (result)
+                                         (message "Command succeeded with result: %s" result))
+                           :timeout-fn (lambda (result)
+                                         (message "Command timed out")))))
+
+
+
+
+
 (add-hook 'llm-mode-hook
           (lambda ()
             (define-key llm-mode-map (kbd "C-c l g") 'eglot-code-action-openai-gpt)
@@ -92,6 +186,11 @@
             (define-key llm-mode-map (kbd "C-c l l") 'eglot-code-action-local-llm)
             (define-key llm-mode-map (kbd "C-c C-c") 'eglot-code-action-local-llm)
             (define-key llm-mode-map (kbd "C-c l s") 'eglot-code-action-stop-local-llm)
+
+            (define-key llm-mode-map (kbd "C-c l v") 'eglot-code-action-transcribe-stream)
+            (define-key llm-mode-map (kbd "C-c l b") 'eglot-code-action-stop-transcribe-stream)
+
+            (define-key llm-mode-map (kbd "C-c l t") 'my-call-sample-command)
             (eglot-ensure)))
 
 (require 'eglot)

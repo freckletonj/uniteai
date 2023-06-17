@@ -20,6 +20,7 @@ from lsprotocol.types import (
     TextDocumentIdentifier,
     TextEdit,
     WorkspaceEdit,
+    DidChangeTextDocumentParams,
 )
 import sys
 from threading import Event
@@ -30,6 +31,11 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 import openai
 import yaml
+
+from threading import Thread
+from queue import Queue
+import speech_recognition as sr
+import re
 
 
 ##################################################
@@ -61,6 +67,10 @@ with open("config.yml", 'r') as file:
     LLM_URI = config['llm_uri']
     TOP_K = config['top_k']
 
+    # TODO move to config
+    TRANSCRIPTION_MODEL_SIZE = 'tiny'
+    TRANSCRIPTION_MODEL_PATH = '/home/josh/_/models/whisper-large-v2'
+
 # A sentinel to be used by LSP clients when calling commands. If a CodeAction is
 # called (from a dropdown in the text editor), params are defined in the python
 # function here. If a Command is called (IE a key sequence), the editor provides
@@ -88,6 +98,7 @@ class Server(LanguageServer):
     def __init__(self, name, version):
         super().__init__(name, version)
         self.stop_stream = Event()
+        self.stop_transcription = Event()
 
         # A Queue for LLM Jobs. By throwing long running tasks on here, LSP
         # endpoints can return immediately.
@@ -130,6 +141,185 @@ def extract_range(doc: str, range: Range) -> str:
 
 
 ##################################################
+# Marker Test
+#
+# This is just a test to get markers saved and recallable on a per-buffer basis.
+
+# Global variable to store the marker
+emacs_marker = {}
+
+@server.command('command.markerSet')
+def marker_set(ls: LanguageServer, args: dict):
+    global emacs_marker
+    doc = args[0]
+    params = args[1] # params= [{'emacsMarker': {'line': 3, 'character': 0}}]
+
+    text_document = converter.structure(doc, TextDocumentIdentifier)
+    uri = text_document.uri
+
+    # Extract the EmacsMarker
+    marker = params['emacsMarker']
+
+    if marker:
+        # Each marker will be a dictionary with 'line' and 'character' keys.
+        emacs_marker[uri] = Position(marker['line'], marker['character'])
+
+        print(f'SET: Set marker at line: {emacs_marker[uri].line} and character: {emacs_marker[uri].character}')
+
+    else:
+        print('No marker received.')
+
+    return {'status': 'success'}
+
+@server.command('command.markerGet')
+def marker_get(ls: LanguageServer, args: dict):
+    global emacs_marker
+    doc = args[0]
+    params = args[1] # params= [{'emacsMarker': {'line': 3, 'character': 0}}]
+
+    text_document = converter.structure(doc, TextDocumentIdentifier)
+    uri = text_document.uri
+
+    if emacs_marker:
+        print(f'GET: Marker is at line: {emacs_marker[uri].line} and character: {emacs_marker[uri].character}')
+    else:
+        print('No marker set.')
+
+    return {'status': 'success'}
+
+
+##################################################
+# Voice Transcription
+
+def filter_alphanum(x:str)->str:
+    ''' keep only alphanum, not even spaces. '''
+    return re.sub(r'\W+', '', x)
+
+filter_list = [
+    filter_alphanum(x)
+    for x in
+    [
+        '',
+        'bye',
+        'you',
+        'thank you',
+        'thanks for watching',
+    ]
+]
+
+def filter_out(x:str) -> bool:
+    # replace all non-alphanumerics
+    x = filter_alphanum(x)
+    if len(x) < 4:
+        return True
+    return x.strip().lower() in filter_list
+
+
+##########
+
+# Speech Recognition setup
+r = sr.Recognizer()
+r.energy_threshold = 2000
+r.dynamic_energy_threshold = False
+
+audio_queue = Queue()
+
+# Global flag to control when the transcription thread should stop
+stop_transcribing = False
+
+
+##########
+# Listening Thread
+
+def listen_worker(ls):
+    print('STARTING L WORKER')
+    with sr.Microphone() as source:
+        try:
+            while not ls.stop_transcription.is_set():
+                print('LISTEN AUDIO')
+                audio_queue.put(r.listen(source))
+        except KeyboardInterrupt:
+            pass
+    print('DONE LISTENING')
+
+
+##########
+# Transcription Thread
+
+def transcribe_worker(ls, args):
+    print('STARTING T WORKER')
+    text_document = converter.structure(args[0], TextDocumentIdentifier)
+    uri = text_document.uri
+    doc = ls.workspace.get_document(uri).source
+
+    while not ls.stop_transcription.is_set():
+        audio = audio_queue.get()
+        print('GOT AUDIO')
+        if audio is None: break
+        try:
+            x = r.recognize_whisper(audio,
+                                    model=TRANSCRIPTION_MODEL_SIZE,
+                                    load_options=dict(
+                                        device='cuda:0',
+                                        download_root=TRANSCRIPTION_MODEL_PATH
+                                    ), language='english').strip()
+
+            print(f'TRANSCRIPTION: {x}')
+            if filter_out(x):
+                continue
+            server.lsp.send_request(
+                "workspace/applyEdit",
+                ApplyWorkspaceEditParams(
+                    edit=WorkspaceEdit(
+                        changes={
+                            uri: [
+                                TextEdit(
+                                    range=Range(start=Position(line=0, character=0),
+                                                end=Position(line=0, character=0)),
+                                    new_text=x
+                                )
+                            ]
+                        }
+                    )
+                ))
+        except sr.UnknownValueError:
+            print("ERROR: could not understand audio")
+        audio_queue.task_done()
+    print('DONE TRANSCRIBING')
+
+@server.thread()
+@server.command('command.transcribeStream')
+def transcribe_stream(ls: LanguageServer, args):
+    ls.stop_transcription.clear()
+
+    listen_thread = Thread(target=listen_worker, args=(ls,))
+    listen_thread.daemon = True
+    listen_thread.start()
+
+    transcribe_thread = Thread(target=transcribe_worker, args=(ls, args))
+    transcribe_thread.daemon = True
+    transcribe_thread.start()
+
+    return
+
+
+
+@server.thread()
+@server.command('command.stopTranscribeStream')
+def stop_transcribe_stream(ls: LanguageServer, args):
+    ls.stop_transcription.set()
+
+    # drain audio queue
+    while True:
+        if audio_queue.empty():
+            break
+        _ = audio_queue.get()
+
+    # stop audio thread
+    audio_queue.put(None)
+
+
+##################################################
 # Local LLM
 
 # For converting jsonified things into proper instances. This is necessary when
@@ -139,8 +329,8 @@ converter = default_converter()
 @server.thread()  # multi-threading unblocks emacs
 @server.command('command.localLlmStream')
 def local_llm_stream(ls: Server, args):
-    print(f'ARGS: {args}')
-    print(f'TYPE: {type(args[0])}')
+    # print(f'ARGS: {args}')
+    # print(f'TYPE: {type(args[0])}')
 
     # free the event so this call can run
     ls.stop_stream.clear()
@@ -232,6 +422,7 @@ COMPLETION_ENGINES = [
 
 CHAT_ENGINES = [
     "gpt-3.5-turbo",
+    "gpt-3.5-turbo-0613",
     "gpt-4",
 ]
 
