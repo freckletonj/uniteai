@@ -12,5 +12,4 @@ config.yml
 .secrets.yaml
 
 # Misc
-sandbox/
 test.llm
