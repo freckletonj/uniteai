@@ -23,7 +23,7 @@ from lsprotocol.types import (
     DidChangeTextDocumentParams,
 )
 import sys
-from threading import Event
+
 import logging
 from pygls.protocol import default_converter
 import requests
@@ -32,11 +32,12 @@ from concurrent.futures import ThreadPoolExecutor
 import openai
 import yaml
 
-from threading import Thread
-from queue import Queue
+from threading import Thread, Lock, Event
+from queue import Queue, Empty
 import speech_recognition as sr
 import re
-
+import numpy as np
+import time
 
 ##################################################
 # Initialization
@@ -70,6 +71,7 @@ with open("config.yml", 'r') as file:
     # TODO move to config
     TRANSCRIPTION_MODEL_SIZE = 'tiny'
     TRANSCRIPTION_MODEL_PATH = '/home/josh/_/models/whisper-large-v2'
+    TRANSCRIPTION_ENERGY_THRESHOLD = 1400
 
 # A sentinel to be used by LSP clients when calling commands. If a CodeAction is
 # called (from a dropdown in the text editor), params are defined in the python
@@ -79,13 +81,14 @@ with open("config.yml", 'r') as file:
 FROM_CONFIG = 'FROM_CONFIG'
 FROM_CONFIG_CHAT = 'FROM_CONFIG_CHAT'
 FROM_CONFIG_COMPLETION = 'FROM_CONFIG_COMPLETION'
+
 ##########
 # Logging
 
 logging.basicConfig(
     stream=sys.stdout,
-    level=logging.DEBUG,
-    # level=logging.INFO,
+    # level=logging.DEBUG,
+    level=logging.INFO,
     # level=logging.WARN,
 )
 
@@ -99,6 +102,7 @@ class Server(LanguageServer):
         super().__init__(name, version)
         self.stop_stream = Event()
         self.stop_transcription = Event()
+        self.is_transcription_running = Event()
 
         # A Queue for LLM Jobs. By throwing long running tasks on here, LSP
         # endpoints can return immediately.
@@ -123,7 +127,6 @@ def workspace_edit(uri: str,
     }
     return WorkspaceEdit(document_changes=[text_document_edit])
 
-
 def extract_range(doc: str, range: Range) -> str:
     '''Extract the highlighted region of the text coming from the client.'''
     lines = doc.split("\n")
@@ -141,49 +144,35 @@ def extract_range(doc: str, range: Range) -> str:
 
 
 ##################################################
-# Marker Test
+# Marker
 #
-# This is just a test to get markers saved and recallable on a per-buffer basis.
 
 # Global variable to store the marker
-emacs_marker = {}
+emacs_markers = {}
 
-@server.command('command.markerSet')
-def marker_set(ls: LanguageServer, args: dict):
-    global emacs_marker
+@server.thread()
+@server.command('command.markerUpdate')
+def marker_update(ls: LanguageServer, args):
+    global emacs_markers
     doc = args[0]
-    params = args[1] # params= [{'emacsMarker': {'line': 3, 'character': 0}}]
+    params_list = args[1] # params_list = [{'line': 3, 'character': 0}, ...]
+    print(f'DOC: {doc}')
+    print(f'PARAMS_LIST: {params_list}')
 
     text_document = converter.structure(doc, TextDocumentIdentifier)
     uri = text_document.uri
 
-    # Extract the EmacsMarker
-    marker = params['emacsMarker']
+    # Initialize the list of markers for this document if it doesn't exist
+    if uri not in emacs_markers:
+        emacs_markers[uri] = {}
 
-    if marker:
-        # Each marker will be a dictionary with 'line' and 'character' keys.
-        emacs_marker[uri] = Position(marker['line'], marker['character'])
-
-        print(f'SET: Set marker at line: {emacs_marker[uri].line} and character: {emacs_marker[uri].character}')
-
-    else:
-        print('No marker received.')
-
-    return {'status': 'success'}
-
-@server.command('command.markerGet')
-def marker_get(ls: LanguageServer, args: dict):
-    global emacs_marker
-    doc = args[0]
-    params = args[1] # params= [{'emacsMarker': {'line': 3, 'character': 0}}]
-
-    text_document = converter.structure(doc, TextDocumentIdentifier)
-    uri = text_document.uri
-
-    if emacs_marker:
-        print(f'GET: Marker is at line: {emacs_marker[uri].line} and character: {emacs_marker[uri].character}')
-    else:
-        print('No marker set.')
+    # Extract the EmacsMarkers
+    for key, marker in  params_list.items():
+        if marker:
+            emacs_markers[uri][key] = marker  # {line: ..., character: ...}
+            print(f'SET: Set marker {key} at line: {marker["line"]} and character: {marker["character"]}')
+        else:
+            print('No marker received.')
 
     return {'status': 'success'}
 
@@ -216,28 +205,70 @@ def filter_out(x:str) -> bool:
 
 
 ##########
-
 # Speech Recognition setup
+
 r = sr.Recognizer()
-r.energy_threshold = 2000
+r.energy_threshold = TRANSCRIPTION_ENERGY_THRESHOLD
 r.dynamic_energy_threshold = False
 
 audio_queue = Queue()
 
-# Global flag to control when the transcription thread should stop
-stop_transcribing = False
+def warmup_whisper():
+    '''Load whisper into memory'''
+    empty_audio = sr.AudioData(np.zeros(10), sample_rate=1, sample_width=1)
+    r.recognize_whisper(empty_audio,
+                        model=TRANSCRIPTION_MODEL_SIZE,
+                        load_options=dict(
+                            device='cuda:0',
+                            download_root=TRANSCRIPTION_MODEL_PATH
+                        ), language='english')
+    print('Warmed up Whisper')
+
+warmup_thread = Thread(target=warmup_whisper)
+warmup_thread.daemon = True
+warmup_thread.start()
+
+
+class ThreadSafeCounter:
+    '''
+    In threadsafe incrementable integer.
+    '''
+    def __init__(self):
+        self.value = 0
+        self._lock = Lock()
+
+    def increment(self):
+        with self._lock:
+            self.value += 1
+            return self.value
+
+    def get(self):
+        return self.value
+
+# Keep track of the iteration when a thread was started. That way, if it had a
+# blocking operation (like `r.listen`) that should have been terminated, but
+# couldn't because the thread was blocked, well, no we can deprecate that
+# thread.
+transcription_counter = ThreadSafeCounter()
 
 
 ##########
 # Listening Thread
 
-def listen_worker(ls):
+def listen_worker(current_i, ls):
+    global transcription_counter
     print('STARTING L WORKER')
     with sr.Microphone() as source:
         try:
             while not ls.stop_transcription.is_set():
                 print('LISTEN AUDIO')
-                audio_queue.put(r.listen(source))
+                audio = r.listen(source) # blocks, and prevents while-loop from
+                                         # terminating when required
+
+                # check if thread was deprecated while r.listen blocked
+                if transcription_counter.get() > current_i:
+                    break
+                audio_queue.put(audio, block=False)
         except KeyboardInterrupt:
             pass
     print('DONE LISTENING')
@@ -246,16 +277,24 @@ def listen_worker(ls):
 ##########
 # Transcription Thread
 
-def transcribe_worker(ls, args):
-    print('STARTING T WORKER')
+def transcribe_worker(current_i, ls, args):
+    global transcription_counter
+    print(f'STARTING T WORKER, args: {args}')
     text_document = converter.structure(args[0], TextDocumentIdentifier)
     uri = text_document.uri
     doc = ls.workspace.get_document(uri).source
 
+    # offsets from marker
+    running_transcription = ""
     while not ls.stop_transcription.is_set():
-        audio = audio_queue.get()
+        try:
+            audio = audio_queue.get(False)
+        except Empty:
+            time.sleep(0.2)
+            continue
+
         print('GOT AUDIO')
-        if audio is None: break
+
         try:
             x = r.recognize_whisper(audio,
                                     model=TRANSCRIPTION_MODEL_SIZE,
@@ -267,56 +306,69 @@ def transcribe_worker(ls, args):
             print(f'TRANSCRIPTION: {x}')
             if filter_out(x):
                 continue
-            server.lsp.send_request(
-                "workspace/applyEdit",
-                ApplyWorkspaceEditParams(
-                    edit=WorkspaceEdit(
-                        changes={
-                            uri: [
-                                TextEdit(
-                                    range=Range(start=Position(line=0, character=0),
-                                                end=Position(line=0, character=0)),
-                                    new_text=x
-                                )
-                            ]
-                        }
-                    )
-                ))
+
+            # Add space to respect next loop of transcription
+            x = x + ' '
+
+            # fetch marker again incase it changed
+            marker = emacs_markers[uri]['transcription']
+
+            # track offsets
+            running_transcription += x
+            lines = running_transcription.split('\n')
+            line_offset = len(lines) - 1
+            column_offset = len(lines[-1])
+
+            pos = Position(marker['line'] + line_offset,
+                           marker['character'] + column_offset)
+
+            edit = workspace_edit(uri, pos, x)
+            params = ApplyWorkspaceEditParams(edit=edit)
+            ls.lsp.send_request("workspace/applyEdit", params)
+            print(f'{marker}, {line_offset}, {column_offset}, {pos}')
+            print(f'SENT EDIT: {x}')
+
         except sr.UnknownValueError:
             print("ERROR: could not understand audio")
         audio_queue.task_done()
     print('DONE TRANSCRIBING')
 
-@server.thread()
+# @server.thread()
 @server.command('command.transcribeStream')
 def transcribe_stream(ls: LanguageServer, args):
+    if ls.is_transcription_running.is_set():
+        return {'status': 'success'}
+
+    ls.is_transcription_running.set()
     ls.stop_transcription.clear()
 
-    listen_thread = Thread(target=listen_worker, args=(ls,))
+    # remember the current iteration when this thread was started.
+    current_i = transcription_counter.increment()
+
+    listen_thread = Thread(target=listen_worker, args=(current_i, ls))
     listen_thread.daemon = True
     listen_thread.start()
 
-    transcribe_thread = Thread(target=transcribe_worker, args=(ls, args))
+    transcribe_thread = Thread(target=transcribe_worker, args=(current_i, ls, args))
     transcribe_thread.daemon = True
     transcribe_thread.start()
 
-    return
+    return {'status': 'success'}
 
-
-
-@server.thread()
+# @server.thread()
 @server.command('command.stopTranscribeStream')
 def stop_transcribe_stream(ls: LanguageServer, args):
     ls.stop_transcription.set()
+    ls.is_transcription_running.clear()
 
     # drain audio queue
-    while True:
-        if audio_queue.empty():
-            break
-        _ = audio_queue.get()
+    try:
+        while True:
+            audio_queue.get(False)
+    except Empty:
+        pass
 
-    # stop audio thread
-    audio_queue.put(None)
+    return {'status': 'success'}
 
 
 ##################################################
@@ -329,9 +381,6 @@ converter = default_converter()
 @server.thread()  # multi-threading unblocks emacs
 @server.command('command.localLlmStream')
 def local_llm_stream(ls: Server, args):
-    # print(f'ARGS: {args}')
-    # print(f'TYPE: {type(args[0])}')
-
     # free the event so this call can run
     ls.stop_stream.clear()
 
@@ -368,7 +417,7 @@ def local_llm_stream(ls: Server, args):
             edit = workspace_edit(uri, cur, response_text)
             params = ApplyWorkspaceEditParams(edit=edit)
             ls.lsp.send_request("workspace/applyEdit", params)
-            cur = Position(line=cur.line + 3, character=0)
+            cur = Position(line=cur.line + 3, character=0) # 3 newlines in response_text
 
             # Stream the results to LSP Client
             for line in response.iter_lines():
@@ -587,3 +636,4 @@ def code_action(params: CodeActionParams) -> List[CodeAction]:
 if __name__ == '__main__':
     print(f'Starting LSP on port: {LSP_PORT}')
     server.start_tcp(host='localhost', port=LSP_PORT)
+    warmup_thread.join()
