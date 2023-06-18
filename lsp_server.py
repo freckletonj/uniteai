@@ -49,6 +49,7 @@ with open(".secret.yml", 'r') as file:
     secrets = yaml.safe_load(file)
 openai.api_key = secrets["OPENAI_API_KEY"]
 
+
 ##########
 # Configuration
 
@@ -68,19 +69,21 @@ with open("config.yml", 'r') as file:
     LLM_URI = config['llm_uri']
     TOP_K = config['top_k']
 
-    # TODO move to config
-    TRANSCRIPTION_MODEL_SIZE = 'tiny'
-    TRANSCRIPTION_MODEL_PATH = '/home/josh/_/models/whisper-large-v2'
-    TRANSCRIPTION_ENERGY_THRESHOLD = 1400
+    # Transcription
+    TRANSCRIPTION_MODEL_SIZE = config['transcription_model_size']
+    TRANSCRIPTION_MODEL_PATH = config['transcription_model_path']
+    TRANSCRIPTION_ENERGY_THRESHOLD = config['transcription_energy_threshold']
+
 
 # A sentinel to be used by LSP clients when calling commands. If a CodeAction is
 # called (from a dropdown in the text editor), params are defined in the python
-# function here. If a Command is called (IE a key sequence), the editor provides
-# the values. But if we want the client to defer to the LSP server's config, use
-# this sentinel.
+# function here. If a Command is called (IE a key sequence bound to a function),
+# the editor provides the values. But if we want the client to defer to the LSP
+# server's config, use this sentinel. See usage example in `docs/`.
 FROM_CONFIG = 'FROM_CONFIG'
 FROM_CONFIG_CHAT = 'FROM_CONFIG_CHAT'
 FROM_CONFIG_COMPLETION = 'FROM_CONFIG_COMPLETION'
+
 
 ##########
 # Logging
@@ -95,7 +98,6 @@ logging.basicConfig(
 
 ##################################################
 # Endpoints
-
 
 class Server(LanguageServer):
     def __init__(self, name, version):
@@ -197,7 +199,6 @@ filter_list = [
 ]
 
 def filter_out(x:str) -> bool:
-    # replace all non-alphanumerics
     x = filter_alphanum(x)
     if len(x) < 4:
         return True
@@ -231,7 +232,7 @@ warmup_thread.start()
 
 class ThreadSafeCounter:
     '''
-    In threadsafe incrementable integer.
+    A threadsafe incrementable integer.
     '''
     def __init__(self):
         self.value = 0
@@ -247,7 +248,7 @@ class ThreadSafeCounter:
 
 # Keep track of the iteration when a thread was started. That way, if it had a
 # blocking operation (like `r.listen`) that should have been terminated, but
-# couldn't because the thread was blocked, well, no we can deprecate that
+# couldn't because the thread was blocked, well, now we can deprecate that
 # thread.
 transcription_counter = ThreadSafeCounter()
 
@@ -256,7 +257,6 @@ transcription_counter = ThreadSafeCounter()
 # Listening Thread
 
 def listen_worker(current_i, ls):
-    global transcription_counter
     print('STARTING L WORKER')
     with sr.Microphone() as source:
         try:
@@ -278,22 +278,20 @@ def listen_worker(current_i, ls):
 # Transcription Thread
 
 def transcribe_worker(current_i, ls, args):
-    global transcription_counter
     print(f'STARTING T WORKER, args: {args}')
     text_document = converter.structure(args[0], TextDocumentIdentifier)
     uri = text_document.uri
     doc = ls.workspace.get_document(uri).source
 
-    # offsets from marker
-    running_transcription = ""
+    running_transcription = "" # keep, for calculating offsets from marker
     while not ls.stop_transcription.is_set():
         try:
+            # non-blocking, to more frequently allow the `stop_transcription`
+            # signal to end this thread.
             audio = audio_queue.get(False)
         except Empty:
             time.sleep(0.2)
             continue
-
-        print('GOT AUDIO')
 
         try:
             x = r.recognize_whisper(audio,
@@ -333,7 +331,6 @@ def transcribe_worker(current_i, ls, args):
         audio_queue.task_done()
     print('DONE TRANSCRIBING')
 
-# @server.thread()
 @server.command('command.transcribeStream')
 def transcribe_stream(ls: LanguageServer, args):
     if ls.is_transcription_running.is_set():
@@ -355,7 +352,6 @@ def transcribe_stream(ls: LanguageServer, args):
 
     return {'status': 'success'}
 
-# @server.thread()
 @server.command('command.stopTranscribeStream')
 def stop_transcribe_stream(ls: LanguageServer, args):
     ls.stop_transcription.set()
@@ -378,7 +374,7 @@ def stop_transcribe_stream(ls: LanguageServer, args):
 # a CodeAction summons a Command, and passes raw JSON to it.
 converter = default_converter()
 
-@server.thread()  # multi-threading unblocks emacs
+@server.thread()  # multi-threading unblocks editor
 @server.command('command.localLlmStream')
 def local_llm_stream(ls: Server, args):
     # free the event so this call can run
@@ -475,9 +471,7 @@ CHAT_ENGINES = [
     "gpt-4",
 ]
 
-
 def openai_autocomplete(engine, text, max_length):
-    print(f"AND THE ENGINE IS: {engine}")
     if engine in COMPLETION_ENGINES:
         response = openai.Completion.create(
           engine=engine,

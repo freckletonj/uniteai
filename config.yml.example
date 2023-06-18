@@ -1,6 +1,6 @@
 # OpenAI
 openai_completion_engine: 'text-davinci-002'
-openai_chat_engine: 'gpt-3.5-turbo'
+openai_chat_engine: 'gpt-3.5-turbo-0613'
 # openai_chat_engine: 'gpt-4'
 openai_max_length: 1000
 
@@ -14,3 +14,8 @@ llm_uri: 'http://localhost:8000'
 
 # LSP
 lsp_port: 5033
+
+# Transcription
+transcription_model_size: 'base'  # tiny, base, small, medium, large-v2
+transcription_model_path: '/home/path/to/whisper'
+transcription_energy_threshold: 1400  # see `speech_recognition` docs
