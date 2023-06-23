@@ -5,9 +5,23 @@ An LSP server that connects to the LLM server for doing the brainy stuff.
 USAGE:
     python lsp_server.py
 
+TODO:
+  - collect regions
+  - send regions to handler
+  - handler sends edits to job queue
+
+
+AutoAssistant
+  - init with streaming function
+  - called with initial prompt
+  - adds edit jobs to a specific block (by tags)
+  - on exit, cleans up the block tags
+
+
 '''
 
 from typing import List
+import pygls
 from pygls.server import LanguageServer
 from lsprotocol.types import (
     ApplyWorkspaceEditParams,
@@ -18,6 +32,7 @@ from lsprotocol.types import (
     Position,
     Range,
     TextDocumentIdentifier,
+    VersionedTextDocumentIdentifier,
     TextEdit,
     WorkspaceEdit,
     DidChangeTextDocumentParams,
@@ -38,6 +53,12 @@ import speech_recognition as sr
 import re
 import numpy as np
 import time
+from dataclasses import dataclass
+from typing import List, Tuple
+import re
+import itertools
+from llmpal.edits import Edits
+
 
 ##################################################
 # Initialization
@@ -75,11 +96,11 @@ with open("config.yml", 'r') as file:
     TRANSCRIPTION_ENERGY_THRESHOLD = config['transcription_energy_threshold']
 
 
-# A sentinel to be used by LSP clients when calling commands. If a CodeAction is
-# called (from a dropdown in the text editor), params are defined in the python
-# function here. If a Command is called (IE a key sequence bound to a function),
-# the editor provides the values. But if we want the client to defer to the LSP
-# server's config, use this sentinel. See usage example in `docs/`.
+# A sentinel to be used by LSP clients when calling commands. If a CodeAction
+# is called (from a dropdown in the text editor), params are defined in the
+# python function here. If a Command is called (IE a key sequence bound to a
+# function), the editor provides the values. But if we want the client to defer
+# to the LSP server's config, use this sentinel. See usage example in `docs/`.
 FROM_CONFIG = 'FROM_CONFIG'
 FROM_CONFIG_CHAT = 'FROM_CONFIG_CHAT'
 FROM_CONFIG_COMPLETION = 'FROM_CONFIG_COMPLETION'
@@ -99,6 +120,7 @@ logging.basicConfig(
 ##################################################
 # Endpoints
 
+
 class Server(LanguageServer):
     def __init__(self, name, version):
         super().__init__(name, version)
@@ -106,273 +128,70 @@ class Server(LanguageServer):
         self.stop_transcription = Event()
         self.is_transcription_running = Event()
 
-        # A Queue for LLM Jobs. By throwing long running tasks on here, LSP
-        # endpoints can return immediately.
+        # A ThreadPool for LLM Jobs. By throwing long running tasks on here,
+        # LSP endpoints can return immediately.
         self.executor = ThreadPoolExecutor(max_workers=1)
+
+        # For converting jsonified things into proper instances. This is
+        # necessary when a CodeAction summons a Command, and passes raw JSON to
+        # it.
+        self.converter = default_converter()
+
+        # Edit-jobs
+        self.edits = Edits(self)
+        self.edits.create_job_queue('transcription')
+        self.edits.create_job_queue('local')
+        self.edits.create_job_queue('api')
+        self.edits.start()
 
 
 server = Server("llm-lsp", "0.1.0")
 
 
 ##################################################
-# Util
+# Assistant
 
-def workspace_edit(uri: str,
-                   new_start: Position,
-                   new_text: str) -> WorkspaceEdit:
-    ''' Build a `WorkspaceEdit` for pygls to send to LSP client. '''
-    text_edit = TextEdit(range=Range(start=new_start, end=new_start),
-                         new_text=new_text)
-    text_document_edit = {
-        'textDocument': TextDocumentIdentifier(uri=uri),
-        'edits': [text_edit],
-    }
-    return WorkspaceEdit(document_changes=[text_document_edit])
+class Assistant:
+    def __init__(self, streaming_function, i):
+        self.streaming_function = streaming_function
+        self.i = i
+        self.stop_event = Event()
 
-def extract_range(doc: str, range: Range) -> str:
-    '''Extract the highlighted region of the text coming from the client.'''
-    lines = doc.split("\n")
-    start = range.start
-    end = range.end
-    if start.line == end.line:
-        return lines[start.line][start.character:end.character]
-    else:
-        start_line_text = lines[start.line][start.character:]
-        middle_lines_text = lines[start.line + 1:end.line]
-        end_line_text = lines[end.line][:end.character]
-        return "\n".join([start_line_text] +
-                         middle_lines_text +
-                         [end_line_text])
+    def start(self, ls: Server, text: str, job_queue: str, start_tag: str, end_tag: str):
+        # Make sure the stop event is cleared
+        self.stop_event.clear()
 
+        # Start streaming in a new thread
+        ls.executor.submit(self._stream, ls, text, job_queue, start_tag, end_tag)
 
-##################################################
-# Marker
-#
+    def _stream(self, ls: Server, text: str, job_queue: str, start_tag: str, end_tag: str):
+        # Stream the results using the streaming function
+        for new_text in self.streaming_function(text):
+            # Check for the stop event
+            if self.stop_event.is_set():
+                break
 
-# Global variable to store the marker
-emacs_markers = {}
+            # Create a new job and add it to the job queue
+            job = Job(uri, start_tag, end_tag, new_text)
+            ls.edits.add_job(job_queue, job)
 
-@server.thread()
-@server.command('command.markerUpdate')
-def marker_update(ls: LanguageServer, args):
-    global emacs_markers
-    doc = args[0]
-    params_list = args[1] # params_list = [{'line': 3, 'character': 0}, ...]
-    print(f'DOC: {doc}')
-    print(f'PARAMS_LIST: {params_list}')
+    def stop(self, ls: Server, doc_source: str, uri: str, version: int):
+        # Set the stop event
+        self.stop_event.set()
 
-    text_document = converter.structure(doc, TextDocumentIdentifier)
-    uri = text_document.uri
+        # Clean up the block tags
+        start_tag = f':START:{i}:'
+        end_tag = f':END:{i}:'
+        remove_regex(ls, [start_tag, end_tag], doc_source, uri, version)
 
-    # Initialize the list of markers for this document if it doesn't exist
-    if uri not in emacs_markers:
-        emacs_markers[uri] = {}
-
-    # Extract the EmacsMarkers
-    for key, marker in  params_list.items():
-        if marker:
-            emacs_markers[uri][key] = marker  # {line: ..., character: ...}
-            print(f'SET: Set marker {key} at line: {marker["line"]} and character: {marker["character"]}')
-        else:
-            print('No marker received.')
-
-    return {'status': 'success'}
-
-
-##################################################
-# Voice Transcription
-
-def filter_alphanum(x:str)->str:
-    ''' keep only alphanum, not even spaces. '''
-    return re.sub(r'\W+', '', x)
-
-filter_list = [
-    filter_alphanum(x)
-    for x in
-    [
-        '',
-        'bye',
-        'you',
-        'thank you',
-        'thanks for watching',
-    ]
-]
-
-def filter_out(x:str) -> bool:
-    x = filter_alphanum(x)
-    if len(x) < 4:
-        return True
-    return x.strip().lower() in filter_list
-
-
-##########
-# Speech Recognition setup
-
-r = sr.Recognizer()
-r.energy_threshold = TRANSCRIPTION_ENERGY_THRESHOLD
-r.dynamic_energy_threshold = False
-
-audio_queue = Queue()
-
-def warmup_whisper():
-    '''Load whisper into memory'''
-    empty_audio = sr.AudioData(np.zeros(10), sample_rate=1, sample_width=1)
-    r.recognize_whisper(empty_audio,
-                        model=TRANSCRIPTION_MODEL_SIZE,
-                        load_options=dict(
-                            device='cuda:0',
-                            download_root=TRANSCRIPTION_MODEL_PATH
-                        ), language='english')
-    print('Warmed up Whisper')
-
-warmup_thread = Thread(target=warmup_whisper)
-warmup_thread.daemon = True
-warmup_thread.start()
-
-
-class ThreadSafeCounter:
-    '''
-    A threadsafe incrementable integer.
-    '''
-    def __init__(self):
-        self.value = 0
-        self._lock = Lock()
-
-    def increment(self):
-        with self._lock:
-            self.value += 1
-            return self.value
-
-    def get(self):
-        return self.value
-
-# Keep track of the iteration when a thread was started. That way, if it had a
-# blocking operation (like `r.listen`) that should have been terminated, but
-# couldn't because the thread was blocked, well, now we can deprecate that
-# thread.
-transcription_counter = ThreadSafeCounter()
-
-
-##########
-# Listening Thread
-
-def listen_worker(current_i, ls):
-    print('STARTING L WORKER')
-    with sr.Microphone() as source:
-        try:
-            while not ls.stop_transcription.is_set():
-                print('LISTEN AUDIO')
-                audio = r.listen(source) # blocks, and prevents while-loop from
-                                         # terminating when required
-
-                # check if thread was deprecated while r.listen blocked
-                if transcription_counter.get() > current_i:
-                    break
-                audio_queue.put(audio, block=False)
-        except KeyboardInterrupt:
-            pass
-    print('DONE LISTENING')
-
-
-##########
-# Transcription Thread
-
-def transcribe_worker(current_i, ls, args):
-    print(f'STARTING T WORKER, args: {args}')
-    text_document = converter.structure(args[0], TextDocumentIdentifier)
-    uri = text_document.uri
-    doc = ls.workspace.get_document(uri).source
-
-    running_transcription = "" # keep, for calculating offsets from marker
-    while not ls.stop_transcription.is_set():
-        try:
-            # non-blocking, to more frequently allow the `stop_transcription`
-            # signal to end this thread.
-            audio = audio_queue.get(False)
-        except Empty:
-            time.sleep(0.2)
-            continue
-
-        try:
-            x = r.recognize_whisper(audio,
-                                    model=TRANSCRIPTION_MODEL_SIZE,
-                                    load_options=dict(
-                                        device='cuda:0',
-                                        download_root=TRANSCRIPTION_MODEL_PATH
-                                    ), language='english').strip()
-
-            print(f'TRANSCRIPTION: {x}')
-            if filter_out(x):
-                continue
-
-            # Add space to respect next loop of transcription
-            x = x + ' '
-
-            # fetch marker again incase it changed
-            marker = emacs_markers[uri]['transcription']
-
-            # track offsets
-            running_transcription += x
-            lines = running_transcription.split('\n')
-            line_offset = len(lines) - 1
-            column_offset = len(lines[-1])
-
-            pos = Position(marker['line'] + line_offset,
-                           marker['character'] + column_offset)
-
-            edit = workspace_edit(uri, pos, x)
-            params = ApplyWorkspaceEditParams(edit=edit)
-            ls.lsp.send_request("workspace/applyEdit", params)
-            print(f'{marker}, {line_offset}, {column_offset}, {pos}')
-            print(f'SENT EDIT: {x}')
-
-        except sr.UnknownValueError:
-            print("ERROR: could not understand audio")
-        audio_queue.task_done()
-    print('DONE TRANSCRIBING')
-
-@server.command('command.transcribeStream')
-def transcribe_stream(ls: LanguageServer, args):
-    if ls.is_transcription_running.is_set():
-        return {'status': 'success'}
-
-    ls.is_transcription_running.set()
-    ls.stop_transcription.clear()
-
-    # remember the current iteration when this thread was started.
-    current_i = transcription_counter.increment()
-
-    listen_thread = Thread(target=listen_worker, args=(current_i, ls))
-    listen_thread.daemon = True
-    listen_thread.start()
-
-    transcribe_thread = Thread(target=transcribe_worker, args=(current_i, ls, args))
-    transcribe_thread.daemon = True
-    transcribe_thread.start()
-
-    return {'status': 'success'}
-
-@server.command('command.stopTranscribeStream')
-def stop_transcribe_stream(ls: LanguageServer, args):
-    ls.stop_transcription.set()
-    ls.is_transcription_running.clear()
-
-    # drain audio queue
-    try:
-        while True:
-            audio_queue.get(False)
-    except Empty:
-        pass
-
-    return {'status': 'success'}
 
 
 ##################################################
 # Local LLM
 
-# For converting jsonified things into proper instances. This is necessary when
-# a CodeAction summons a Command, and passes raw JSON to it.
-converter = default_converter()
+
+# local_counter = ThreadSafeCounter()
+
 
 @server.thread()  # multi-threading unblocks editor
 @server.command('command.localLlmStream')
@@ -380,13 +199,30 @@ def local_llm_stream(ls: Server, args):
     # free the event so this call can run
     ls.stop_stream.clear()
 
+    current_i = local_counter.increment()
+    start_tag = f':START_LOCAL:{current_i}:'
+    end_tag = f':END_LOCAL:{current_i}:'
+
     text_document = converter.structure(args[0], TextDocumentIdentifier)
     range = converter.structure(args[1], Range)
     uri = text_document.uri
-    doc = ls.workspace.get_document(uri).source
+    doc = ls.workspace.get_document(uri)
+    version = doc.version
+    doc_source = doc.source
 
     # Extract the highlighted region
-    input_text = extract_range(doc, range)
+    input_text = extract_range(doc_source, range)
+
+    # Insert new Tags
+    cur = Position(line=range.end.line + 1,
+                   character=0)
+    tags = '\n'.join([
+        start_tag,
+        end_tag
+    ])
+    edit = workspace_edit(uri, version, cur, cur, tags)
+    params = ApplyWorkspaceEditParams(edit=edit)
+    ls.lsp.send_request("workspace/applyEdit", params)
 
     def stream(ls):
         try:
@@ -404,38 +240,28 @@ def local_llm_stream(ls: Server, args):
             if response.status_code != 200:
                 raise Exception(f"POST request to {LLM_URI} failed with status code {response.status_code}")
 
-            # Initialize Cursor as current end position
-            cur = Position(line=range.end.line + 1,
-                           character=range.end.character)
-
-            # Print "RESPONSE:"
-            response_text = '\n\nLOCAL_RESPONSE:\n'
-            edit = workspace_edit(uri, cur, response_text)
-            params = ApplyWorkspaceEditParams(edit=edit)
-            ls.lsp.send_request("workspace/applyEdit", params)
-            cur = Position(line=cur.line + 3, character=0) # 3 newlines in response_text
-
             # Stream the results to LSP Client
+            running_text = ''
             for line in response.iter_lines():
+                # For breaking out early
+                if ls.stop_stream.is_set():
+                    return
                 response_data = json.loads(line)
                 new_text = response_data["generated_text"]
                 # ignore empty strings
                 if len(new_text) == 0:
                     continue
-                edit = workspace_edit(uri, cur, new_text)
-                params = ApplyWorkspaceEditParams(edit=edit)
-                ls.lsp.send_request("workspace/applyEdit", params)
 
-                # Update the current position, accounting for newlines
-                newlines = new_text.count('\n')
-                last_line = new_text.rsplit('\n', 1)[-1] if '\n' in new_text else new_text
-                last_line_length = len(last_line)
-                cur = Position(line=cur.line + newlines,
-                               character=last_line_length if newlines else cur.character + len(new_text))
+                running_text += new_text
+                job = Job(
+                    uri,
+                    start_tag,
+                    end_tag,
+                    f'\n{running_text}\n',
+                )
+                ls.edit_jobs['local'].put(job)
 
-                # For breaking out early
-                if ls.stop_stream.is_set():
-                    return
+
         except Exception as e:
             print(f'EXCEPTION: {e}')
 
@@ -445,12 +271,26 @@ def local_llm_stream(ls: Server, args):
     # Return an empty edit. The actual edits will be carried out by Commands in
     # the `stream` function.
     return WorkspaceEdit()
-
-
+#
+# @server.thread()
 @server.command('command.localLlmStreamStop')
-def local_llm_stream_stop(ls: Server, *args):
+def local_llm_stream_stop(ls: Server, args):
+    start_tag = r':START_LOCAL:\d+:'
+    end_tag   = r':END_LOCAL:\d+:'
+
+    print('STOP STREAMN')
     ls.stop_stream.set()
+
+    print('POST')
     requests.post(f"{LLM_URI}/local_llm_stream_stop", json='{}')
+
+    # Remove tags
+    text_document = converter.structure(args[0], TextDocumentIdentifier)
+    uri = text_document.uri
+    doc = ls.workspace.get_document(uri)
+    version = doc.version
+    remove_regex(ls, [start_tag, end_tag], doc.source, uri, version)
+    return {'status': 'success'}
 
 
 ##################################################

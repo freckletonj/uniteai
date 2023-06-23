@@ -126,17 +126,21 @@ def local_llm_stream_(request, q, streamer, local_llm_stop_event):
         pad_token_id=tokenizer.eos_token_id,  # for open-end generation
         stopping_criteria=stopping_criteria,
     )
+    print(f'PRE-GENERATION: {request.text[:40]}')
     model.generate(**generation_kwargs)
     # BLOCKS
+    print('DONE GENERATING')
 
 
 def stream_results(streamer):
     for x in streamer:
         if not local_llm_stop_event.is_set():
+            print(f'yield: {x}')
             yield (
                 AutocompleteResponse(generated_text=x).json() + STREAM_TOK
             ).encode('utf-8')
         else:
+            print('STOP WAS SET')
             break
 
 
