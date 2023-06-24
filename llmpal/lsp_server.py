@@ -128,9 +128,9 @@ class Server(LanguageServer):
         self.stop_transcription = Event()
         self.is_transcription_running = Event()
 
-        # A ThreadPool for LLM Jobs. By throwing long running tasks on here,
-        # LSP endpoints can return immediately.
-        self.executor = ThreadPoolExecutor(max_workers=1)
+        # A ThreadPool for tasks. By throwing long running tasks on here, LSP
+        # endpoints can return immediately.
+        self.executor = ThreadPoolExecutor(max_workers=3)
 
         # For converting jsonified things into proper instances. This is
         # necessary when a CodeAction summons a Command, and passes raw JSON to
@@ -146,44 +146,6 @@ class Server(LanguageServer):
 
 
 server = Server("llm-lsp", "0.1.0")
-
-
-##################################################
-# Assistant
-
-class Assistant:
-    def __init__(self, streaming_function, i):
-        self.streaming_function = streaming_function
-        self.i = i
-        self.stop_event = Event()
-
-    def start(self, ls: Server, text: str, job_queue: str, start_tag: str, end_tag: str):
-        # Make sure the stop event is cleared
-        self.stop_event.clear()
-
-        # Start streaming in a new thread
-        ls.executor.submit(self._stream, ls, text, job_queue, start_tag, end_tag)
-
-    def _stream(self, ls: Server, text: str, job_queue: str, start_tag: str, end_tag: str):
-        # Stream the results using the streaming function
-        for new_text in self.streaming_function(text):
-            # Check for the stop event
-            if self.stop_event.is_set():
-                break
-
-            # Create a new job and add it to the job queue
-            job = Job(uri, start_tag, end_tag, new_text)
-            ls.edits.add_job(job_queue, job)
-
-    def stop(self, ls: Server, doc_source: str, uri: str, version: int):
-        # Set the stop event
-        self.stop_event.set()
-
-        # Clean up the block tags
-        start_tag = f':START:{i}:'
-        end_tag = f':END:{i}:'
-        remove_regex(ls, [start_tag, end_tag], doc_source, uri, version)
-
 
 
 ##################################################

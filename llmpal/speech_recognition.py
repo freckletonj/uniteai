@@ -88,6 +88,28 @@ class ThreadSafeCounter:
         return self.value
 
 
+def remove_regex(ls, tags, doc, uri, version):
+    removals = itertools.chain.from_iterable(
+        [find_pattern_in_document(doc, tag)for tag in tags]
+    )
+    removals = [
+        (Position(i, s),
+         Position(i, e),
+         ''  # remove original tags
+         )
+        for i, s, e in removals
+    ]
+    edit = workspace_edits(uri,
+                           version,
+                           removals
+                           )
+    print(f'{edit} \nWORKSPACE EDITS')
+    params = ApplyWorkspaceEditParams(edit=edit)
+    futu = ls.lsp.send_request("workspace/applyEdit", params)
+    # res = futu.result()
+    # print(f'RESTULT: {res}')
+
+
 ##########
 # Speech Recognition setup
 
@@ -239,29 +261,6 @@ def transcribe_stream(ls: LanguageServer, args):
     transcribe_thread.start()
 
     return {'status': 'success'}
-
-
-def remove_regex(ls, tags, doc, uri, version):
-    removals = itertools.chain.from_iterable(
-        [find_pattern_in_document(doc, tag)for tag in tags]
-    )
-    removals = [
-        (Position(i, s),
-         Position(i, e),
-         ''  # remove original tags
-         )
-        for i, s, e in removals
-    ]
-    edit = workspace_edits(uri,
-                           version,
-                           removals
-                           )
-    print(f'{edit} \nWORKSPACE EDITS')
-    params = ApplyWorkspaceEditParams(edit=edit)
-    futu = ls.lsp.send_request("workspace/applyEdit", params)
-    # res = futu.result()
-    # print(f'RESTULT: {res}')
-
 
 @server.thread()
 @server.command('command.stopTranscribeStream')

@@ -53,7 +53,8 @@ class Job:
     start_tag: str
     end_tag: str
     text: str
-
+    strict: str  # strict jobs MUST be applied, non-strict may be skipped (eg
+                 # interim state when streaming)
 
 JOB_DELAY = 0.2
 
@@ -119,12 +120,16 @@ def find_tag(tag: str, doc_lines: [str]):
     return None
 
 
-def drain_queue(q):
-    ''' Drain a queue, and return the latest item. '''
+def drain_non_strict_queue(q):
+    '''Drain a queue up until the first "strict" job or the latest job.'''
     x = None
     while True:
         try:
             x = q.get(False)
+            if x.strict:
+                return x
+            else:
+                continue
         except Empty:
             return x
 
@@ -165,23 +170,32 @@ assert find_pattern_in_document('', "o") == []
 #
 
 class Edits:
-    '''Edits are saved as jobs to the queue, and applied when document versioning
-        aligns properly. Each key is a separate queue. Each queue maintains an
-        expectation that only the most recent edit matters, and previous edits
-        in the queue have been deprecated, and therefore can be dropped.
+    '''Edits are saved as jobs to the queue, and applied when document
+    versioning aligns properly. Each key is a separate queue. Each queue
+    maintains an expectation that only the most recent edit matters, and
+    previous edits in the queue have been deprecated, and therefore can be
+    dropped.
 
     '''
 
-    def __init__(self, ls: LanguageServer):
-        # A dict of queues, one for each separate process of edits (eg
-        # Transcription, Local LLM, API-based LLM).
+    def __init__(self, applicator_fn):
+        # A function for applying jobs
+        self.applicator_fn = applicator_fn
+        # A dict of queues, one for each separate process of edit blocks.
         self.edit_jobs = {}
 
-    def create_job_queue(self, name):
+    def create_job_queue(self, name: str):
+        ''' Create a job queue. '''
         if name not in self.edit_jobs:
-            self.edit_jobs[name] = Queue()
+            q = Queue()
+            self.edit_jobs[name] = q
+            return q
+        return self.edit_jobs[name]
 
-    def start(self, ls: LanguageServer):
+    def add_job(self, name: str, job: Job):
+        self.edit_jobs[name].put(job)
+
+    def start(self):
         self.job_thread = Thread(target=self._process_edit_jobs, daemon=True)
         self.job_thread.start()
 
@@ -193,12 +207,21 @@ class Edits:
         failed_count = 0
         while True:
             for k, q in self.edit_jobs.items():
-                job = drain_queue(q)
-                # retry failed jobs, if no new tasks exist
-                job = job if job else failed_job
+                if failed_job and failed_job.strict:
+                    # Strict jobs must apply before continuing to pull off the
+                    # queue.
+                    #
+                    # TODO: what if a "strict" job can never be applied? When
+                    #       would that be?
+                    job = failed_job
+                    failed_count = 0
+                else:
+                    # get next strict, or the latest
+                    job = drain_non_strict_queue(q)
+                    # retry failed jobs, if no new tasks exist
+                    job = job if job else failed_job
                 if job is not None and failed_count <= n_retries:
-                    print(f'{k}: {job}')
-                    success = _attempt_edit_job(self.ls, job)
+                    success = self.applicator_fn(job)
                     if success:
                         failed_job = None
                         failed_count = 0
@@ -209,8 +232,8 @@ class Edits:
 
 
 def _attempt_edit_job(ls: LanguageServer, job: Job):
-    '''Try to execute a job (apply an edit to the document). May fail if document
-    versions don't match.
+    '''Try to execute a job (apply an edit to the document). May fail if
+    document versions don't match.
 
     '''
     try:
@@ -235,6 +258,8 @@ def _attempt_edit_job(ls: LanguageServer, job: Job):
             future = ls.lsp.send_request("workspace/applyEdit", params)
             resp = future.result()
             return True
+        else:
+            raise ValueError(f'tags not found in document {job.uri} to apply edit: {job.text}')
 
     except pygls.exceptions.JsonRpcException:
         # Most likely a document version mismatch, which is fine. It just
