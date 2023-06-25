@@ -152,8 +152,7 @@ server = Server("llm-lsp", "0.1.0")
 # Local LLM
 
 
-# local_counter = ThreadSafeCounter()
-
+local_counter = ThreadSafeCounter()
 
 @server.thread()  # multi-threading unblocks editor
 @server.command('command.localLlmStream')

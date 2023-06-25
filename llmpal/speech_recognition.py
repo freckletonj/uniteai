@@ -40,6 +40,7 @@ from dataclasses import dataclass
 from typing import List, Tuple
 import re
 import itertools
+from llmpal.common import ThreadSafeCounter
 
 
 ##########
@@ -68,25 +69,6 @@ def filter_out(x: str) -> bool:
     if len(x) < 4:
         return True
     return x.strip().lower() in filter_list
-
-
-class ThreadSafeCounter:
-    '''
-    A threadsafe incrementable integer.
-    '''
-
-    def __init__(self):
-        self.value = 0
-        self._lock = Lock()
-
-    def increment(self):
-        with self._lock:
-            self.value += 1
-            return self.value
-
-    def get(self):
-        return self.value
-
 
 def remove_regex(ls, tags, doc, uri, version):
     removals = itertools.chain.from_iterable(

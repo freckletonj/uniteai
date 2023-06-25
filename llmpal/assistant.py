@@ -1,11 +1,12 @@
-'''An Assistant is given domain over a block within a document, defined by start
+'''
+
+An Assistant is given domain over a block within a document, defined by start
 and end tags, and will stream text to the block. It will handle the lifecycle
 of creating the tags, and cleaning them up, as well as handling concurrency
 issues as the streaming function it's given churns on a separate thread.
 
 '''
 
-from typing import List
 import pygls
 from pygls.server import LanguageServer
 from lsprotocol.types import (
@@ -22,63 +23,76 @@ from lsprotocol.types import (
     WorkspaceEdit,
     DidChangeTextDocumentParams,
 )
-import sys
+from llmpal.edit import Edits
+from threading import Event
+from concurrent.futures import Future
+from typing import Callable, Optional
+from llmpal.common import ThreadSafeCounter
 
-import logging
-from pygls.protocol import default_converter
-import requests
-import json
-from concurrent.futures import ThreadPoolExecutor
-import openai
-import yaml
-
-from threading import Thread, Lock, Event
-from queue import Queue, Empty
-import speech_recognition as sr
-import re
-import numpy as np
-import time
-from dataclasses import dataclass
-from typing import List, Tuple
-import re
-import itertools
-from llmpal.edits import Job, Edits
 
 class Assistant:
-    def __init__(self,
-                 streaming_function,
-                 edits: Edits,
-                 start_tag: str,
-                 end_tag: str):
-        self.streaming_function = streaming_function
-        self.edits = edits
-        self.start_tag = start_tag
-        self.end_tag = end_tag
-        self.stop_event = Event()
+    ''' An `Assistant` controls a block of text, can take stream the output of
+    a multithreaded function into that block, and cleans up its
+    block-demarcating tags.
+    '''
 
-    def start(self, text: str):
-        # Make sure the stop event is cleared
-        self.stop_event.clear()
+    def __init__(self,
+                 name: str,
+                 executor,
+                 edits: Edits,
+                 on_start_but_running: Callable[[], None],
+                 on_stop_but_stopped: Callable[[], None],
+                 ):
+
+        self.name = name
+        self.edits = edits
+        self.executor = executor
+        self.on_start_but_running = on_start_but_running
+        self.on_stop_but_stopped = on_stop_but_stopped
+
+        # Concurrency things
+        self.local_counter = ThreadSafeCounter()
+        self.cleanup_function = None
+        self.current_future: Optional[Future] = None
+        self.is_running = Event()
+        self.should_stop = Event()
+
+    def start(self,
+              init_function: Callable[Edits, None],
+              streaming_function: Callable[[Event, Edits], None],
+              cleanup_function: Callable[[Edits], None]
+              ):
+        # Check if it's safe to run
+        if self.is_running.is_set():
+            return self.on_start_but_running()
 
         # Start streaming in a new thread
-        ls.executor.submit(self._stream, ls, text, job_queue, start_tag, end_tag)
+        init_function(self.edits)
+        self.cleanup_function = cleanup_function
+        self.is_running.set()
+        self.current_future = self.executor.submit(
+            streaming_function,
+            self.should_stop,
+            self.edits
+        )
 
-    def _stream(self, text: str):
-        # Stream the results using the streaming function
-        for new_text in self.streaming_function(text):
-            # Check for the stop event
-            if self.stop_event.is_set():
-                break
+    def stop(self):
+        # Check if it's safe to stop
+        if not self.is_running.is_set():
+            return self.on_stop_but_stopped()
 
-            # Create a new job and add it to the job queue
-            job = Job(uri, start_tag, end_tag, new_text)
-            self.edits.add_job(job_queue, job)
-
-    def stop(self, ls: Server, doc_source: str, uri: str, version: int):
         # Set the stop event
-        self.stop_event.set()
+        self.should_stop.set()
 
-        # Clean up the block tags
-        start_tag = r':START:\d+:'
-        end_tag = r':END:\d+:'
-        remove_regex(ls, [start_tag, end_tag], doc_source, uri, version)
+        if self.current_future:
+            self.current_future.result()  # block, wait to finish
+            self.current_future = None
+
+        self.is_running.clear()
+        self.should_stop.clear()
+        self.cleanup_function(self.edits)
+
+
+
+def lsp_assistant():
+    pass

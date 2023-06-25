@@ -38,7 +38,7 @@ import re
 import numpy as np
 import time
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Tuple, Union
 import re
 import itertools
 
@@ -48,15 +48,24 @@ import itertools
 
 
 @dataclass
-class Job:
+class BlockJob:
     uri: str
     start_tag: str
     end_tag: str
     text: str
-    strict: str  # strict jobs MUST be applied, non-strict may be skipped (eg
-                 # interim state when streaming)
+    # strict jobs MUST be applied, non-strict may be skipped (eg interim state
+    # when streaming)
+    strict: bool
 
-JOB_DELAY = 0.2
+
+@dataclass
+class DeleteJob:
+    uri: str
+    regex: str
+    strict: bool
+
+
+LSPJob = Union[BlockJob, DeleteJob]
 
 
 ##################################################
@@ -178,9 +187,10 @@ class Edits:
 
     '''
 
-    def __init__(self, applicator_fn):
+    def __init__(self, applicator_fn, job_delay=0.2):
         # A function for applying jobs
         self.applicator_fn = applicator_fn
+        self.job_delay = job_delay
         # A dict of queues, one for each separate process of edit blocks.
         self.edit_jobs = {}
 
@@ -192,7 +202,11 @@ class Edits:
             return q
         return self.edit_jobs[name]
 
-    def add_job(self, name: str, job: Job):
+    def add_job(self, name: str, job):
+        ''' Add a "job", which can be any dataclass and have any data, but must
+        also have a field called `strict` which determines if this edit must be
+        applied, or can possibly be dropped (eg in the case of streaming data,
+        interim state can be dropped.  '''
         self.edit_jobs[name].put(job)
 
     def start(self):
@@ -210,17 +224,16 @@ class Edits:
                 if failed_job and failed_job.strict:
                     # Strict jobs must apply before continuing to pull off the
                     # queue.
-                    #
-                    # TODO: what if a "strict" job can never be applied? When
-                    #       would that be?
                     job = failed_job
-                    failed_count = 0
+                    if failed_count > 1000:
+                        raise Exception(f'a strict job has failed to apply after 1000 attempts. This should not happen, please report this incident. The job was: {job}')
                 else:
                     # get next strict, or the latest
                     job = drain_non_strict_queue(q)
                     # retry failed jobs, if no new tasks exist
                     job = job if job else failed_job
-                if job is not None and failed_count <= n_retries:
+                if job is not None and (job.strict
+                                        or failed_count <= n_retries):
                     success = self.applicator_fn(job)
                     if success:
                         failed_job = None
@@ -228,12 +241,57 @@ class Edits:
                     if not success:
                         failed_job = job
                         failed_count += 1
-            time.sleep(JOB_DELAY)
+            time.sleep(self.job_delay)
 
 
-def _attempt_edit_job(ls: LanguageServer, job: Job):
-    '''Try to execute a job (apply an edit to the document). May fail if
-    document versions don't match.
+def _attempt_edit_job(ls: LanguageServer, job: LSPJob):
+    if isinstance(job, BlockJob):
+        return _attempt_block_job(ls, job)
+    elif isinstance(job, DeleteJob):
+        return _attempt_delete_job(ls, job)
+
+def _attempt_delete_job(ls: LanguageServer, job: DeleteJob):
+    ''' An `applicator_fn` specialized to pygls Servers.
+
+    Try to execute a job that deletes some regex. May fail if document versions
+    don't match.
+
+    '''
+    try:
+        doc = ls.workspace.get_document(job.uri)
+        version = doc.version
+        doc_lines = doc.source.split('\n')
+
+        m_found = find_tag(job.regex, doc_lines)
+        if m_found:
+            ix, s, e = m_found
+            start_position = Position(ix, s)
+            end_position = Position(ix, e)
+            edit = workspace_edit(job.uri,
+                                  version,
+                                  start_position,
+                                  end_position,
+                                  '')
+            params = ApplyWorkspaceEditParams(edit=edit)
+            future = ls.lsp.send_request("workspace/applyEdit", params)
+            future.result()  # blocks
+            return True
+        else:
+            raise ValueError(f'tags not found in document {job.uri} to apply edit: {job.text}')
+
+    except pygls.exceptions.JsonRpcException:
+        # Most likely a document version mismatch, which is fine. It just
+        # means someone edited the document concurrently, and this is set up
+        # to try applying the job again.
+        return False
+
+
+def _attempt_block_job(ls: LanguageServer, job: BlockJob):
+    ''' An `applicator_fn` specialized to pygls Servers.
+
+    Try to execute a job (apply an edit to the document) within the confines of
+    a "block" demarcated by start and end tags. May fail if document versions
+    don't match.
 
     '''
     try:
@@ -256,7 +314,7 @@ def _attempt_edit_job(ls: LanguageServer, job: Job):
                                   job.text)
             params = ApplyWorkspaceEditParams(edit=edit)
             future = ls.lsp.send_request("workspace/applyEdit", params)
-            resp = future.result()
+            future.result()  # blocks
             return True
         else:
             raise ValueError(f'tags not found in document {job.uri} to apply edit: {job.text}')
