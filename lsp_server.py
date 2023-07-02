@@ -65,9 +65,8 @@ logging.basicConfig(
 )
 
 # Tune this libs loggers as needed
-logger_actor = mk_logger('actor', logging.WARN)
-logger_server = mk_logger('server', logging.WARN)
-logger_local_llm = mk_logger('local_llm', logging.WARN)
+log_local_llm = mk_logger('local_llm', logging.WARN)
+log_openai = mk_logger('openai', logging.WARN)
 
 # Quiet the libs a little
 logging.getLogger('pygls.feature_manager').setLevel(logging.WARN)
@@ -128,7 +127,7 @@ FROM_CONFIG_COMPLETION = 'FROM_CONFIG_COMPLETION'
 
 
 ##################################################
-#
+# Local LLM
 
 local_llm_start_tag = ':START_LOCAL:'
 local_llm_end_tag = ':END_LOCAL:'
@@ -137,11 +136,12 @@ local_llm_name = 'local_llm'
 
 class LLMStreamActor(Actor):
     def __init__(self):
-        logger_actor.debug('ACTOR INIT')
+        log_local_llm.debug('ACTOR INIT')
         self.is_running = False
         self.executor = ThreadPoolExecutor(max_workers=3)
         self.current_future = None
         self.should_stop = Event()
+        self.tags = [local_llm_start_tag, local_llm_end_tag]
 
     def receiveMessage(self, msg, sender):
         if isinstance(msg, dict):
@@ -154,7 +154,7 @@ class LLMStreamActor(Actor):
                                             doc)
 
             edits = msg.get('edits')
-            logger_actor.debug(
+            log_local_llm.debug(
                 f'%%%%%%%%%%'
                 f'ACTOR RECV: {msg["command"]}'
                 f'ACTOR STATE:'
@@ -174,7 +174,7 @@ class LLMStreamActor(Actor):
                 edits = msg.get('edits')
 
                 if not (start_ixs and end_ixs):
-                    local_llm_init(uri, range, edits)
+                    actor_init(local_llm_name, self.tags, uri, range, edits)
 
                 self.start(uri, range, prompt, edits)
 
@@ -185,9 +185,9 @@ class LLMStreamActor(Actor):
 
     def start(self, uri, range, prompt, edits):
         if self.is_running:
-            logger_actor.info('WARN: ON_START_BUT_RUNNING')
+            log_local_llm.info('WARN: ON_START_BUT_RUNNING')
             return
-        logger_actor.debug('ACTOR START')
+        log_local_llm.debug('ACTOR START')
 
         self.is_running = True
         self.should_stop.clear()
@@ -197,8 +197,8 @@ class LLMStreamActor(Actor):
             local_llm_stream_fn(uri_, prompt_, should_stop_, edits_)
 
             # Cleanup
-            logger_actor.debug('CLEANING UP')
-            local_llm_cleanup(uri_, edits_)
+            log_local_llm.debug('CLEANING UP')
+            actor_cleanup(local_llm_name, self.tags, uri_, edits_)
             self.is_running = False
             self.current_future = None
             self.should_stop.clear()
@@ -206,19 +206,118 @@ class LLMStreamActor(Actor):
         self.current_future = self.executor.submit(
             f, uri, prompt, self.should_stop, edits
         )
-        logger_actor.debug('START CAN RETURN')
+        log_local_llm.debug('START CAN RETURN')
 
     def stop(self):
-        logger_actor.debug('ACTOR STOP')
+        log_local_llm.debug('ACTOR STOP')
         if not self.is_running:
-            logger_actor.info('WARN: ON_STOP_BUT_STOPPED')
+            log_local_llm.info('WARN: ON_STOP_BUT_STOPPED')
 
         self.should_stop.set()
 
         if self.current_future:
             self.current_future.result()  # block, wait to finish
             self.current_future = None
-        logger_actor.debug('FINALLY STOPPED')
+        log_local_llm.debug('FINALLY STOPPED')
+
+
+##################################################
+# OpenAI
+
+openai_start_tag = ':START_OPENAI:'
+openai_end_tag = ':END_OPENAI:'
+openai_name = 'openai'
+
+
+class OpenAIStreamActor(Actor):
+    def __init__(self):
+        log_openai.debug('ACTOR INIT')
+        self.is_running = False
+        self.executor = ThreadPoolExecutor(max_workers=3)
+        self.current_future = None
+        self.should_stop = Event()
+        self.tags = [openai_start_tag, openai_end_tag]
+
+    def receiveMessage(self, msg, sender):
+        if isinstance(msg, dict):
+            command = msg.get('command')
+            doc = msg.get('doc')
+
+            # check if block already exists
+            start_ixs, end_ixs = find_block(openai_start_tag,
+                                            openai_end_tag,
+                                            doc)
+
+            edits = msg.get('edits')
+            log_openai.debug(
+                f'%%%%%%%%%%'
+                f'ACTOR RECV: {msg["command"]}'
+                f'ACTOR STATE:'
+                f'found block: {start_ixs}  |  {end_ixs}'
+                f'is_running: {self.is_running}'
+                f'locked: {self.should_stop.is_set()}'
+                f'future: {self.current_future}'
+                f''
+                f'EDITS STATE:'
+                f'job_thread alive: {edits.job_thread.is_alive()}'
+                f'%%%%%%%%%%'
+            )
+            if command == 'start':
+                uri = msg.get('uri')
+                range = msg.get('range')
+                prompt = msg.get('prompt')
+                engine = msg.get('engine')
+                max_length = msg.get('max_length')
+                edits = msg.get('edits')
+
+                if not (start_ixs and end_ixs):
+                    actor_init(openai_name, self.tags, uri, range, edits)
+
+                self.start(uri, range, prompt, engine, max_length, edits)
+
+            elif command == 'stop':
+                uri = msg.get('uri')
+                edits = msg.get('edits')
+                self.stop()
+
+    def start(self, uri, range, prompt, engine, max_length, edits):
+        if self.is_running:
+            log_openai.info('WARN: ON_START_BUT_RUNNING')
+            return
+        log_openai.debug('ACTOR START')
+
+        self.is_running = True
+        self.should_stop.clear()
+
+        def f(uri_, prompt_, engine_, max_length_, should_stop_, edits_):
+            ''' Compose the streaming fn with some cleanup. '''
+            openai_stream_fn(uri_, prompt_, engine_, max_length_,
+                             should_stop_, edits_)
+
+            # Cleanup
+            log_openai.debug('CLEANING UP')
+            actor_cleanup(openai_name, self.tags, uri_, edits_)
+            self.is_running = False
+            self.current_future = None
+            self.should_stop.clear()
+
+        self.current_future = self.executor.submit(
+            f, uri, prompt, engine, max_length, self.should_stop, edits
+        )
+        log_openai.debug('START CAN RETURN')
+
+    def stop(self):
+        log_openai.debug('ACTOR STOP')
+        if not self.is_running:
+            log_openai.info('WARN: ON_STOP_BUT_STOPPED')
+
+        self.should_stop.set()
+
+        if self.current_future:
+            self.current_future.result()  # block, wait to finish
+            self.current_future = None
+        log_openai.debug('FINALLY STOPPED')
+
 
 
 ##################################################
@@ -246,14 +345,22 @@ class Server(LanguageServer):
                            edit_job_delay)
         # self.edits.create_job_queue('transcription')
         self.edits.create_job_queue(local_llm_name)
-        # self.edits.create_job_queue('api')
+        self.edits.create_job_queue(openai_name)
         self.edits.start()
 
         # Actor System
         self.actor_system = ActorSystem()
-        self.llm_stream_actor = self.actor_system.createActor(
+
+        # Local LLM
+        self.local_llm_actor = self.actor_system.createActor(
             LLMStreamActor,
             globalName="LLMStreamActor"
+        )
+
+        # OpenAI
+        self.openai_actor = self.actor_system.createActor(
+            OpenAIStreamActor,
+            globalName="OpenAIStreamActor"
         )
 
 
@@ -263,12 +370,9 @@ server = Server("llm-lsp", "0.1.0")
 ##################################################
 # Local LLM
 
-def local_llm_init(uri, range, edits):
+def actor_init(edit_name, tags, uri, range, edits):
     ''' Insert new tags, demarcating block. '''
-    tags = '\n'.join([
-        local_llm_start_tag,
-        local_llm_end_tag
-    ])
+    tags = '\n'.join(tags)
     job = InsertJob(
         uri=uri,
         text=tags,
@@ -276,20 +380,20 @@ def local_llm_init(uri, range, edits):
         column=0,
         strict=True,
     )
-    edits.add_job(local_llm_name, job)
+    edits.add_job(edit_name, job)
 
 
-def local_llm_cleanup(uri, edits):
+def actor_cleanup(edit_name, tags, uri, edits):
     ''' Delete tags that demarcated block. '''
-    edits.add_job(local_llm_name, DeleteJob(
+    edits.add_job(edit_name, DeleteJob(
         uri=uri,
-        regexs=[local_llm_start_tag, local_llm_end_tag],
+        regexs=tags,
         strict=True,
     ))
 
 
 def local_llm_stream_fn(uri, prompt, stop_event, edits):
-    logger_local_llm.debug('START: LOCAL_LLM_STREAM_FN')
+    log_local_llm.debug('START: LOCAL_LLM_STREAM_FN')
     try:
         request_data = {
             "text": prompt,
@@ -313,11 +417,11 @@ def local_llm_stream_fn(uri, prompt, stop_event, edits):
         for line in response.iter_lines():
             # For breaking out early
             if stop_event.is_set():
-                logger_local_llm.debug('STREAM_FN received STOP EVENT')
+                log_local_llm.debug('STREAM_FN received STOP EVENT')
                 return
             response_data = json.loads(line)
             new_text = response_data["generated_text"]
-            logger_local_llm.debug(f'NEW: {new_text}')
+            log_local_llm.debug(f'NEW: {new_text}')
             # ignore empty strings
             if len(new_text) == 0:
                 continue
@@ -346,7 +450,7 @@ def local_llm_stream_fn(uri, prompt, stop_event, edits):
         edits.add_job(local_llm_name, job)
 
     except Exception as e:
-        logger_local_llm.error(f'Error: Local LLM, {e}')
+        log_local_llm.error(f'Error: Local LLM, {e}')
 
 
 @server.thread()
@@ -370,7 +474,7 @@ def local_llm_stream(ls: Server, args):
         'edits': ls.edits,
         'doc': doc_source,
     }
-    ls.actor_system.tell(ls.llm_stream_actor, actor_args)
+    ls.actor_system.tell(ls.local_llm_actor, actor_args)
 
 
 @server.thread()
@@ -388,7 +492,8 @@ def local_llm_stream_stop(ls: Server, args):
         'edits': ls.edits,
         'doc': doc_source,
     }
-    ls.actor_system.tell(ls.llm_stream_actor, actor_args)
+    ls.actor_system.tell(ls.local_llm_actor, actor_args)
+    ls.actor_system.tell(ls.openai_actor, actor_args)
 
 
 ##################################################
@@ -411,6 +516,7 @@ CHAT_ENGINES = [
 
 
 def openai_autocomplete(engine, text, max_length):
+    ''' Stream responses from OpenAI's API as a generator. '''
     if engine in COMPLETION_ENGINES:
         response = openai.Completion.create(
           engine=engine,
@@ -435,6 +541,80 @@ def openai_autocomplete(engine, text, max_length):
                 yield generated_text
 
 
+def openai_stream_fn(uri, prompt, engine, max_length, stop_event, edits):
+    log_openai.debug('START: OPENAI_STREAM_FN')
+    try:
+        # Stream the results to LSP Client
+        running_text = ''
+        for new_text in openai_autocomplete(engine, prompt, max_length):
+            # For breaking out early
+            if stop_event.is_set():
+                log_openai.debug('STREAM_FN received STOP EVENT')
+                return
+            log_openai.debug(f'NEW: {new_text}')
+            # ignore empty strings
+            if len(new_text) == 0:
+                continue
+
+            running_text += new_text
+            job = BlockJob(
+                uri=uri,
+                start_tag=openai_start_tag,
+                end_tag=openai_end_tag,
+                text=f'\n{running_text}\n',
+                strict=False,
+            )
+            edits.add_job(openai_name, job)
+
+        # Streaming is done, and those added jobs were all non-strict. Let's
+        # make sure to have one final strict job. Streaming jobs are ok to be
+        # dropped, but we need to make sure it does finalize, eg before a
+        # strict delete-tags job is added.
+        job = BlockJob(
+            uri=uri,
+            start_tag=openai_start_tag,
+            end_tag=openai_end_tag,
+            text=f'\n{running_text}\n',
+            strict=True,
+        )
+        edits.add_job(local_llm_name, job)
+
+    except Exception as e:
+        log_openai.error(f'Error: Local LLM, {e}')
+
+
+# def stream(ls, engine, text, max_length):
+#     # Initialize Cursor as current end position
+#     cur = Position(line=range.end.line + 1, character=range.end.character)
+
+#     response_text = '\n\nOPENAI_RESPONSE:\n'
+#     edit = workspace_edit(uri, cur, response_text)
+#     params = ApplyWorkspaceEditParams(edit=edit)
+#     ls.lsp.send_request("workspace/applyEdit", params)
+#     cur = Position(line=cur.line + 3, character=0)
+
+#     # Call the openai_autocomplete function with request and stream
+#     # parameters
+#     for new_text in openai_autocomplete(engine, text, max_length):
+#         edit = workspace_edit(uri, cur, new_text)
+#         params = ApplyWorkspaceEditParams(edit=edit)
+#         ls.lsp.send_request("workspace/applyEdit", params)
+
+#         # Update the current position, accounting for newlines
+#         newlines = new_text.count('\n')
+#         last_line = (new_text.rsplit('\n', 1)[-1]
+#                      if '\n' in new_text
+#                      else new_text)
+#         last_line_length = len(last_line)
+#         cur = Position(line=cur.line + newlines,
+#                        character=(last_line_length
+#                                   if newlines
+#                                   else cur.character + len(new_text)))
+
+#         # For breaking out early
+#         if ls.stop_stream.is_set():
+#             break
+
 @server.thread()
 @server.command('command.openaiAutocompleteStream')
 def openai_autocomplete_stream(ls: Server, args):
@@ -444,10 +624,8 @@ def openai_autocomplete_stream(ls: Server, args):
     text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
     range = ls.converter.structure(args[1], Range)
 
-    # Check for sentinel values to allow LSP client to defer arguments to
-    # server's configuration.
-
-    # Engine
+    # Determine engine, by checking for sentinel values to allow LSP client to
+    # defer arguments to server's configuration.
     if args[2] == FROM_CONFIG_CHAT:
         engine = OPENAI_CHAT_ENGINE
     elif args[2] == FROM_CONFIG_COMPLETION:
@@ -461,52 +639,56 @@ def openai_autocomplete_stream(ls: Server, args):
     else:
         max_length = args[3]
 
-    # Get the document
+    text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
+    range = ls.converter.structure(args[1], Range)
     uri = text_document.uri
-    doc = ls.workspace.get_document(uri).source
+    doc = ls.workspace.get_document(uri)
+    doc_source = doc.source
 
     # Extract the highlighted region
-    input_text = extract_range(doc, range)
+    prompt = extract_range(doc_source, range)
 
-    def stream(ls, engine, text, max_length):
-        # Initialize Cursor as current end position
-        cur = Position(line=range.end.line + 1, character=range.end.character)
+    # Send a message to start the stream
+    actor_args = {
+        'command': 'start',
+        'uri': uri,
+        'range': range,
+        'prompt': prompt,
+        'engine': engine,
+        'max_length': max_length,
+        'edits': ls.edits,
+        'doc': doc_source,
+    }
+    ls.actor_system.tell(ls.openai_actor, actor_args)
 
-        response_text = '\n\nOPENAI_RESPONSE:\n'
-        edit = workspace_edit(uri, cur, response_text)
-        params = ApplyWorkspaceEditParams(edit=edit)
-        ls.lsp.send_request("workspace/applyEdit", params)
-        cur = Position(line=cur.line + 3, character=0)
+    # # Get the document
+    # uri = text_document.uri
+    # doc = ls.workspace.get_document(uri).source
 
-        # Call the openai_autocomplete function with request and stream
-        # parameters
-        for new_text in openai_autocomplete(engine, text, max_length):
-            edit = workspace_edit(uri, cur, new_text)
-            params = ApplyWorkspaceEditParams(edit=edit)
-            ls.lsp.send_request("workspace/applyEdit", params)
+    # # Extract the highlighted region
+    # input_text = extract_range(doc, range)
 
-            # Update the current position, accounting for newlines
-            newlines = new_text.count('\n')
-            last_line = (new_text.rsplit('\n', 1)[-1]
-                         if '\n' in new_text
-                         else new_text)
-            last_line_length = len(last_line)
-            cur = Position(line=cur.line + newlines,
-                           character=(last_line_length
-                                      if newlines
-                                      else cur.character + len(new_text)))
-
-            # For breaking out early
-            if ls.stop_stream.is_set():
-                break
-
-    ls.executor.submit(stream, ls, engine, input_text, max_length)
+    # ls.executor.submit(openai_stream, ls, engine, input_text, max_length)
     return WorkspaceEdit()
 
 
 @server.command('command.openaiAutocompleteStreamStop')
 def openai_autocomplete_stream_stop(ls: Server, *args):
-    ls.stop_stream.set()
+    # ls.stop_stream.set()
+    text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
+    uri = text_document.uri
+    doc = ls.workspace.get_document(uri)
+    doc_source = doc.source
+
+    # Send a message to stop the stream
+    actor_args = {
+        'command': 'stop',
+        'uri': uri,
+        'edits': ls.edits,
+        'doc': doc_source,
+    }
+    ls.actor_system.tell(ls.openai_actor, actor_args)
+
 
 
 ##################################################

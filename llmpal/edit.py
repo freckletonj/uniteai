@@ -154,8 +154,12 @@ class Edits:
                 # If no strict failed_jobs exist, try getting latest off queue,
                 # or previous non-strict failed jobs.
                 else:
-                    # get next strict, or the latest
+                    # get next strict, or the latest (dropping interim)
                     job = drain_non_strict_queue(q)
+                    if job:
+                        failed_job = None
+                        failed_count = 0
+
                     # retry failed jobs, if no new tasks exist
                     if not job and failed_count <= n_retries:
                         job = failed_job
