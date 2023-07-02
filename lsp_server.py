@@ -76,7 +76,9 @@ logging.getLogger('Thespian').setLevel(logging.WARN)
 
 
 # NOTE: Thespian has a domineering logging methodology. To change their default
-#       formatter, see: `thespian.system.simpleSystemBase`
+#       formatter, see: `thespian.system.simpleSystemBase`.
+#
+#       Also, https://github.com/thespianpy/Thespian/issues/73
 
 
 ##################################################
@@ -180,11 +182,10 @@ class LLMStreamActor(Actor):
                 uri = msg.get('uri')
                 edits = msg.get('edits')
                 self.stop()
-                # local_llm_cleanup(uri, edits)
 
     def start(self, uri, range, prompt, edits):
         if self.is_running:
-            logger_actor.debug('WARN: ON_START_BUT_RUNNING')
+            logger_actor.info('WARN: ON_START_BUT_RUNNING')
             return
         logger_actor.debug('ACTOR START')
 
@@ -192,6 +193,7 @@ class LLMStreamActor(Actor):
         self.should_stop.clear()
 
         def f(uri_, prompt_, should_stop_, edits_):
+            ''' Compose the streaming fn with some cleanup. '''
             local_llm_stream_fn(uri_, prompt_, should_stop_, edits_)
 
             # Cleanup
@@ -202,18 +204,14 @@ class LLMStreamActor(Actor):
             self.should_stop.clear()
 
         self.current_future = self.executor.submit(
-            f,
-            uri,
-            prompt,
-            self.should_stop,
-            edits
+            f, uri, prompt, self.should_stop, edits
         )
         logger_actor.debug('START CAN RETURN')
 
     def stop(self):
         logger_actor.debug('ACTOR STOP')
         if not self.is_running:
-            logger_actor.debug('WARN: ON_STOP_BUT_STOPPED')
+            logger_actor.info('WARN: ON_STOP_BUT_STOPPED')
 
         self.should_stop.set()
 

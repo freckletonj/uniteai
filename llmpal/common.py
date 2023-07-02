@@ -31,7 +31,8 @@ import logging
 
 
 def mk_logger(name, level):
-    ''' A logger builder helper. The Thespian '''
+    ''' A logger builder helper. This helps out since Thespian is overly
+    opinionated about logging.'''
     logger = logging.getLogger(name)
     handler = logging.StreamHandler()
     handler.setLevel(level)

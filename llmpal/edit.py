@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from llmpal.common import find_tag, workspace_edit, workspace_edits, mk_logger
 import logging
 
-log = mk_logger('edit', logging.DEBUG)
+log = mk_logger('edit', logging.WARN)
 
 
 ##################################################
@@ -125,7 +125,8 @@ class Edits:
           comes in, in which case this job is ok to drop. This is useful during
           streaming.
 
-        * If a strict job comes in, it must be applied.
+        * If a strict job comes in, it must be applied before drawing more jobs
+          off the queue.
 
         '''
         n_retries = 5
@@ -135,9 +136,10 @@ class Edits:
         while True:
             for k, q in self.edit_jobs.items():
                 job = None  # reset
+
+                # Strict jobs must apply before continuing to pull off the
+                # queue.
                 if failed_job and failed_job.strict:
-                    # Strict jobs must apply before continuing to pull off the
-                    # queue.
                     if failed_count > n_retries_strict:
                         msg = (
                             f'a strict job has failed to apply after '
@@ -148,15 +150,18 @@ class Edits:
                         failed_count = 0
                     else:
                         job = failed_job
+
+                # If no strict failed_jobs exist, try getting latest off queue,
+                # or previous non-strict failed jobs.
                 else:
                     # get next strict, or the latest
                     job = drain_non_strict_queue(q)
-                    print('tick: ' + str(job)[:20])
                     # retry failed jobs, if no new tasks exist
-                    job = job if job else failed_job
-                if job is not None and (job.strict
-                                        or failed_count <= n_retries):
-                    print('got job, non None')
+                    if not job and failed_count <= n_retries:
+                        job = failed_job
+
+                # Execute extant jobs.
+                if job is not None:
                     success = self.applicator_fn(job)
                     if success:
                         failed_job = None
@@ -202,7 +207,7 @@ def _attempt_insert_job(ls: LanguageServer, job: InsertJob):
         # Most likely a document version mismatch, which is fine. It just
         # means someone edited the document concurrently, and this is set up
         # to try applying the job again.
-        log.debug(f'ATTEMPT_INSERT_JOB WARN: {e}')
+        log.info(f'ATTEMPT_INSERT_JOB: {e}')
         return False
 
 
@@ -233,7 +238,8 @@ def _attempt_delete_job(ls: LanguageServer, job: DeleteJob):
 
         # log warning if tags missed
         if failed_regexs:
-            msg = f'tags not found in document to apply deletion: {failed_regexs}'
+            msg = (f'tags not found in document to apply deletion: '
+                   f'{failed_regexs}')
             logging.warn(msg)
 
         # fire off a delete request for the regexs that were found.
@@ -246,24 +252,11 @@ def _attempt_delete_job(ls: LanguageServer, job: DeleteJob):
             future.result()  # blocks
             return True
 
-        # if not job.strict or (job.strict and not failed):
-        #     edit = workspace_edits(job.uri,
-        #                            version,
-        #                            start_end_texts)
-        #     params = ApplyWorkspaceEditParams(edit=edit)
-        #     future = ls.lsp.send_request("workspace/applyEdit", params)
-        #     future.result()  # blocks
-        #     return True
-        # else:
-        #     msg = f'tags not found in document {job.uri} to apply deletion.'
-        #     logging.warn(msg)
-        #     # raise ValueError(msg)
-
     except pygls.exceptions.JsonRpcException as e:
         # Most likely a document version mismatch, which is fine. It just
         # means someone edited the document concurrently, and this is set up
         # to try applying the job again.
-        log.warn(f'ATTEMPT_DELETE_JOB WARN: {e}')
+        log.info(f'ATTEMPT_DELETE_JOB: {e}')
         return False
 
 
@@ -313,5 +306,5 @@ def _attempt_block_job(ls: LanguageServer, job: BlockJob):
         # Most likely a document version mismatch, which is fine. It just
         # means someone edited the document concurrently, and this is set up
         # to try applying the job again.
-        log.warning(f'ATTEMPT_BLOCK_JOB WARN: {e}')
+        log.info(f'ATTEMPT_BLOCK_JOB: {e}')
         return False
