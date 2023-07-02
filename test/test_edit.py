@@ -1,7 +1,8 @@
 '''
 
 `Edits` is awkward to test since it intrinsically deals with concurrency. So,
-these tests are ugly.
+these tests are ugly. I create a mocked version of what the LSP is doing, which
+is essentially just a string document that can be accessed threadsafely.
 
 '''
 
@@ -343,10 +344,12 @@ def test_7_non_strict_but_pauses():
 ##################################################
 # Assistant Tests (TODO: move these to own module)
 
-def streaming_function(name, start_tag, end_tag, start_i):
+def streaming_function(name, start_tag, end_tag, start_i, end_i):
+    ''' count up to end_i, and stream edits to a block '''
     def f(should_stop_event, edits, i=start_i):
-        while not should_stop_event.is_set():
-            i += 1
+        for i in range(start_i, end_i):
+            if should_stop_event.is_set():
+                break
             edits.add_job(name,
                           FakeBlockJob(
                               start_tag=start_tag,
@@ -396,9 +399,9 @@ def on_stop_but_stopped(n):
     return f
 
 
-def test_concurrent_assistants():
+def test_concurrent_assistants_explicit_stopping():
     '''
-    TODO: this is kinda a hacky way to test.
+    Test where threads are explicitly stopped
     '''
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
@@ -437,7 +440,7 @@ def test_concurrent_assistants():
 
     # Start Assistant1
     assistant1.start(init_function(n1, n1, 1, -1),
-                     streaming_function(n1, start_tag_1, end_tag_1, 0),
+                     streaming_function(n1, start_tag_1, end_tag_1, 1, int(1e6)),
                      cleanup_function(n1, start_tag_1, end_tag_1))
     with pytest.raises(Exception) as e:
         assistant1.start(None, None, None)
@@ -445,7 +448,7 @@ def test_concurrent_assistants():
 
     # Start Assistant2
     assistant2.start(init_function(n2, n2, 2, -1),
-                     streaming_function(n2, start_tag_2, end_tag_2, 1000),
+                     streaming_function(n2, start_tag_2, end_tag_2, 1001, int(1e6)),
                      cleanup_function(n2, start_tag_2, end_tag_2))
     with pytest.raises(Exception) as e:
         assistant2.start(None, None, None)
@@ -465,8 +468,89 @@ def test_concurrent_assistants():
         assistant2.stop()  # stop twice
     assert str(e.value) == 'B is already stopped'
 
-    time.sleep(1)
+    time.sleep(JOB_DELAY * 10) # allow cleanup to happen
     expected = '''
 12345678910
 1001100210031004100510061007100810091010'''
+    assert doc.get() == expected
+
+
+def test_concurrent_assistants_stop_by_finishing():
+    '''
+    Test where threads allowed to finish, and never explicitly stopped
+    '''
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+
+    doc = ThreadSafeVar('')
+    app_fn = append_applicator_fn(doc)
+    edits = Edits(app_fn, job_delay=JOB_DELAY)
+
+    n1 = "A"
+    start_tag_1 = ':START_A:'
+    end_tag_1 = ':END_A:'
+    assistant1 = Assistant(
+        name=n1,
+        executor=executor,
+        edits=edits,
+        on_start_but_running=on_start_but_running(n1),
+        on_stop_but_stopped=on_stop_but_stopped(n1),
+    )
+
+    n2 = "B"
+    start_tag_2 = ':START_B:'
+    end_tag_2 = ':END_B:'
+    assistant2 = Assistant(
+        name=n2,
+        executor=executor,
+        edits=edits,
+        on_start_but_running=on_start_but_running(n2),
+        on_stop_but_stopped=on_stop_but_stopped(n2),
+    )
+
+    # Create job queues for each assistant
+    edits.create_job_queue(n1)
+    edits.create_job_queue(n2)
+
+    # Start the edits thread
+    edits.start()
+
+    ##########
+    # ROUND 1
+
+    # Start Assistant1
+    assistant1.start(init_function(n1, n1, 1, -1),
+                     streaming_function(n1, start_tag_1, end_tag_1, 1, 4),  # << shorter run
+                     cleanup_function(n1, start_tag_1, end_tag_1))
+
+    # Start Assistant2
+    assistant2.start(init_function(n2, n2, 2, -1),
+                     streaming_function(n2, start_tag_2, end_tag_2, 1001, 1004),  # << shorter run
+                     cleanup_function(n2, start_tag_2, end_tag_2))
+    assistant2.stop()  # test explicit stopping
+
+    # Let them run for 10x the delay streaming_function
+    time.sleep(JOB_DELAY*100)
+
+
+    ##########
+    # ROUND 2
+
+    # Start Assistant1
+    assistant1.start(init_function(n1, n1, -1, -1),
+                     streaming_function(n1, start_tag_1, end_tag_1, 1, 4),  # << shorter run
+                     cleanup_function(n1, start_tag_1, end_tag_1))
+
+    # Start Assistant2
+    assistant2.start(init_function(n2, n2, -1, -1),
+                     streaming_function(n2, start_tag_2, end_tag_2, 1001, 1004),  # << shorter run
+                     cleanup_function(n2, start_tag_2, end_tag_2))
+
+    # Let them run for 10x the delay streaming_function
+    time.sleep(JOB_DELAY*100)
+
+    expected = '''
+123
+1001
+123
+100110021003'''
     assert doc.get() == expected

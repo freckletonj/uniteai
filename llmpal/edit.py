@@ -4,43 +4,22 @@ Jobs for applying textual edits to the LSP client
 
 '''
 
-from typing import List
+from typing import List, Union
 import pygls
 from pygls.server import LanguageServer
 from lsprotocol.types import (
     ApplyWorkspaceEditParams,
-    CodeAction,
-    CodeActionKind,
-    CodeActionParams,
-    Command,
     Position,
-    Range,
-    TextDocumentIdentifier,
-    VersionedTextDocumentIdentifier,
-    TextEdit,
-    WorkspaceEdit,
-    DidChangeTextDocumentParams,
 )
-import sys
 
-import logging
-from pygls.protocol import default_converter
-import requests
-import json
-from concurrent.futures import ThreadPoolExecutor
-import openai
-import yaml
-
-from threading import Thread, Lock, Event
+from threading import Thread
 from queue import Queue, Empty
-import speech_recognition as sr
-import re
-import numpy as np
 import time
 from dataclasses import dataclass
-from typing import List, Tuple, Union
-import re
-import itertools
+from llmpal.common import find_tag, workspace_edit, workspace_edits, mk_logger
+import logging
+
+log = mk_logger('edit', logging.DEBUG)
 
 
 ##################################################
@@ -61,73 +40,24 @@ class BlockJob:
 @dataclass
 class DeleteJob:
     uri: str
-    regex: str
+    regexs: List[str]
     strict: bool
 
 
-LSPJob = Union[BlockJob, DeleteJob]
+@dataclass
+class InsertJob:
+    uri: str
+    text: str
+    line: int
+    column: int
+    strict: bool
+
+
+LSPJob = Union[InsertJob, BlockJob, DeleteJob]
 
 
 ##################################################
 # Util
-
-def workspace_edit(uri: str,
-                   version: int,
-                   start: Position,
-                   end: Position,
-                   new_text: str) -> WorkspaceEdit:
-    ''' Build a `WorkspaceEdit` for pygls to send to LSP client. '''
-    text_edit = TextEdit(range=Range(start=start, end=end), new_text=new_text)
-    text_document_edit = {
-        'textDocument': VersionedTextDocumentIdentifier(uri=uri,
-                                                        version=version),
-        'edits': [text_edit],
-    }
-    return WorkspaceEdit(document_changes=[text_document_edit])
-
-
-def workspace_edits(uri: str,
-                    version: int,
-                    start_end_text: List[Tuple[Position, Position, str]]
-                    ) -> WorkspaceEdit:
-    ''' Build a `WorkspaceEdit` for pygls to send to LSP client. '''
-    text_edits = [
-        TextEdit(range=Range(start=start, end=end), new_text=new_text)
-        for start, end, new_text in start_end_text
-    ]
-    text_document_edit = {
-        'textDocument': VersionedTextDocumentIdentifier(uri=uri,
-                                                        version=version),
-        'edits': text_edits,
-    }
-    return WorkspaceEdit(document_changes=[text_document_edit])
-
-
-def extract_range(doc: str, range: Range) -> str:
-    '''Extract the highlighted region of the text coming from the client.'''
-    lines = doc.split("\n")
-    start = range.start
-    end = range.end
-    if start.line == end.line:
-        return lines[start.line][start.character:end.character]
-    else:
-        start_line_text = lines[start.line][start.character:]
-        middle_lines_text = lines[start.line + 1:end.line]
-        end_line_text = lines[end.line][:end.character]
-        return "\n".join([start_line_text] +
-                         middle_lines_text +
-                         [end_line_text])
-
-
-def find_tag(tag: str, doc_lines: [str]):
-    ''' Find index of first element that contains `tag`. '''
-    ix = 0
-    for ix, line in enumerate(doc_lines):
-        match = re.search(tag, line)
-        if match:
-            return ix, match.start(), match.end()
-    return None
-
 
 def drain_non_strict_queue(q):
     '''Drain a queue up until the first "strict" job or the latest job.'''
@@ -141,38 +71,6 @@ def drain_non_strict_queue(q):
                 continue
         except Empty:
             return x
-
-
-def find_pattern_in_document(
-        document: str,
-        pattern: str) -> List[Tuple[int, int, int]]:
-    '''Return (line, start_col, end_col) for each match. Regex cannot span
-    newlines.'''
-    result = []
-    compiled_pattern = re.compile(pattern)
-
-    for line_number, line in enumerate(document.split('\n')):
-        for match in compiled_pattern.finditer(line):
-            start, end = match.span()
-            result.append((line_number, start, end))
-
-    return result
-
-
-# @@@@@@@@@@
-# Tests
-document = '''
-Hello, world!
-Regex is fun.
-I like programming in Python.
-'''
-
-assert find_pattern_in_document(document, "o") == [(1, 4, 5), (1, 8, 9),
-                                                   (3, 9, 10), (3, 26, 27)]
-assert find_pattern_in_document(document, "P...on") == [(3, 22, 28)]
-assert find_pattern_in_document(document, "Java") == []
-assert find_pattern_in_document('', "o") == []
-# @@@@@@@@@@
 
 
 ##################################################
@@ -193,6 +91,7 @@ class Edits:
         self.job_delay = job_delay
         # A dict of queues, one for each separate process of edit blocks.
         self.edit_jobs = {}
+        self.job_thread = None
 
     def create_job_queue(self, name: str):
         ''' Create a job queue. '''
@@ -207,6 +106,9 @@ class Edits:
         also have a field called `strict` which determines if this edit must be
         applied, or can possibly be dropped (eg in the case of streaming data,
         interim state can be dropped.  '''
+        log.debug(
+            f'ADDING JOB, current queue size: {self.edit_jobs[name].qsize()}'
+        )
         self.edit_jobs[name].put(job)
 
     def start(self):
@@ -215,25 +117,46 @@ class Edits:
 
     def _process_edit_jobs(self):
         '''A thread that continuously pulls jobs from the queue and attempts to
-        execute them.'''
-        n_retries = 10
+        execute them.
+
+        Rules:
+
+        * If a non-strict job comes in, try to apply it, until a newer job
+          comes in, in which case this job is ok to drop. This is useful during
+          streaming.
+
+        * If a strict job comes in, it must be applied.
+
+        '''
+        n_retries = 5
+        n_retries_strict = 5
         failed_job = None
         failed_count = 0
         while True:
             for k, q in self.edit_jobs.items():
+                job = None  # reset
                 if failed_job and failed_job.strict:
                     # Strict jobs must apply before continuing to pull off the
                     # queue.
-                    job = failed_job
-                    if failed_count > 1000:
-                        raise Exception(f'a strict job has failed to apply after 1000 attempts. This should not happen, please report this incident. The job was: {job}')
+                    if failed_count > n_retries_strict:
+                        msg = (
+                            f'a strict job has failed to apply after '
+                            f'{n_retries_strict} attempts. The job was: '
+                            f'{failed_job}')
+                        logging.error(msg)
+                        failed_job = None
+                        failed_count = 0
+                    else:
+                        job = failed_job
                 else:
                     # get next strict, or the latest
                     job = drain_non_strict_queue(q)
+                    print('tick: ' + str(job)[:20])
                     # retry failed jobs, if no new tasks exist
                     job = job if job else failed_job
                 if job is not None and (job.strict
                                         or failed_count <= n_retries):
+                    print('got job, non None')
                     success = self.applicator_fn(job)
                     if success:
                         failed_job = None
@@ -245,10 +168,43 @@ class Edits:
 
 
 def _attempt_edit_job(ls: LanguageServer, job: LSPJob):
+    if isinstance(job, InsertJob):
+        return _attempt_insert_job(ls, job)
     if isinstance(job, BlockJob):
         return _attempt_block_job(ls, job)
     elif isinstance(job, DeleteJob):
         return _attempt_delete_job(ls, job)
+
+
+def _attempt_insert_job(ls: LanguageServer, job: InsertJob):
+    ''' An `applicator_fn` specialized to pygls Servers.
+
+    Try to execute a job that inserts some text. May fail if document versions
+    don't match.
+
+    '''
+    log.debug('APPLYING INSERT')
+    try:
+        doc = ls.workspace.get_document(job.uri)
+        version = doc.version
+        position = Position(job.line, job.column)
+        edit = workspace_edit(job.uri,
+                              version,
+                              position,
+                              position,
+                              job.text)
+        params = ApplyWorkspaceEditParams(edit=edit)
+        future = ls.lsp.send_request("workspace/applyEdit", params)
+        future.result()  # blocks
+        return True
+
+    except pygls.exceptions.JsonRpcException as e:
+        # Most likely a document version mismatch, which is fine. It just
+        # means someone edited the document concurrently, and this is set up
+        # to try applying the job again.
+        log.debug(f'ATTEMPT_INSERT_JOB WARN: {e}')
+        return False
+
 
 def _attempt_delete_job(ls: LanguageServer, job: DeleteJob):
     ''' An `applicator_fn` specialized to pygls Servers.
@@ -262,27 +218,52 @@ def _attempt_delete_job(ls: LanguageServer, job: DeleteJob):
         version = doc.version
         doc_lines = doc.source.split('\n')
 
-        m_found = find_tag(job.regex, doc_lines)
-        if m_found:
-            ix, s, e = m_found
-            start_position = Position(ix, s)
-            end_position = Position(ix, e)
-            edit = workspace_edit(job.uri,
-                                  version,
-                                  start_position,
-                                  end_position,
-                                  '')
+        # Collect positions of regexs
+        failed_regexs = []
+        start_end_texts = []
+        for regex in job.regexs:
+            m_found = find_tag(regex, doc_lines)
+            if m_found:
+                ix, s, e = m_found
+                start_position = Position(ix, s)
+                end_position = Position(ix, e)
+                start_end_texts.append((start_position, end_position, ''))
+            else:
+                failed_regexs.append(regex)
+
+        # log warning if tags missed
+        if failed_regexs:
+            msg = f'tags not found in document to apply deletion: {failed_regexs}'
+            logging.warn(msg)
+
+        # fire off a delete request for the regexs that were found.
+        if start_end_texts:
+            edit = workspace_edits(job.uri,
+                                   version,
+                                   start_end_texts)
             params = ApplyWorkspaceEditParams(edit=edit)
             future = ls.lsp.send_request("workspace/applyEdit", params)
             future.result()  # blocks
             return True
-        else:
-            raise ValueError(f'tags not found in document {job.uri} to apply edit: {job.text}')
 
-    except pygls.exceptions.JsonRpcException:
+        # if not job.strict or (job.strict and not failed):
+        #     edit = workspace_edits(job.uri,
+        #                            version,
+        #                            start_end_texts)
+        #     params = ApplyWorkspaceEditParams(edit=edit)
+        #     future = ls.lsp.send_request("workspace/applyEdit", params)
+        #     future.result()  # blocks
+        #     return True
+        # else:
+        #     msg = f'tags not found in document {job.uri} to apply deletion.'
+        #     logging.warn(msg)
+        #     # raise ValueError(msg)
+
+    except pygls.exceptions.JsonRpcException as e:
         # Most likely a document version mismatch, which is fine. It just
         # means someone edited the document concurrently, and this is set up
         # to try applying the job again.
+        log.warn(f'ATTEMPT_DELETE_JOB WARN: {e}')
         return False
 
 
@@ -294,6 +275,7 @@ def _attempt_block_job(ls: LanguageServer, job: BlockJob):
     don't match.
 
     '''
+    log.debug('APPLYING BLOCK')
     try:
         doc = ls.workspace.get_document(job.uri)
         version = doc.version
@@ -302,6 +284,7 @@ def _attempt_block_job(ls: LanguageServer, job: BlockJob):
         m_start = find_tag(job.start_tag, doc_lines)
         m_end = find_tag(job.end_tag, doc_lines)
         if m_start and m_end:
+            log.debug('BLOCK: found tags, applying edit')
             ix, s, e = m_start
             start_position = Position(ix, e)
             ix, s, e = m_end
@@ -316,11 +299,19 @@ def _attempt_block_job(ls: LanguageServer, job: BlockJob):
             future = ls.lsp.send_request("workspace/applyEdit", params)
             future.result()  # blocks
             return True
-        else:
-            raise ValueError(f'tags not found in document {job.uri} to apply edit: {job.text}')
+        elif job.strict:  # couldn't find tags
+            log.debug('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n'
+                      f'DOCUMENT: {doc.source}\n'
+                      '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
+            msg = (
+                f'tags not found in document {job.uri} to apply edit: '
+                f'{job.text}. Tags: {job.start_tag} and {job.end_tag}'
+            )
+            logging.warning(msg)
 
-    except pygls.exceptions.JsonRpcException:
+    except pygls.exceptions.JsonRpcException as e:
         # Most likely a document version mismatch, which is fine. It just
         # means someone edited the document concurrently, and this is set up
         # to try applying the job again.
+        log.warning(f'ATTEMPT_BLOCK_JOB WARN: {e}')
         return False
