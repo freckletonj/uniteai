@@ -141,6 +141,7 @@ def local_llm_stream_(request, streamer, local_llm_stop_event):
 
 def stream_results(streamer):
     for x in streamer:
+        # Stream response, and stop early if requested
         if not local_llm_stop_event.is_set():
             print(f'yield: {x}')
             yield (

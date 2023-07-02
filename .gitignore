@@ -5,11 +5,5 @@ __pycache__/
 # Config
 config.yml
 
-# Secrets
-.secret.yml
-.secrets.yml
-.secret.yaml
-.secrets.yaml
-
 # Misc
 test.llm

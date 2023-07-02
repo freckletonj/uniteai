@@ -181,7 +181,7 @@
 
 (defun eglot-code-action-stop-local-llm ()
   (interactive)
-  (eglot-execute-command (eglot--current-server-or-lose) 'command.localLlmStreamStop '()))
+  (eglot-execute-command (eglot--current-server-or-lose) 'command.stop '()))
 
 (defun eglot-code-action-transcribe-stream ()
   (interactive)

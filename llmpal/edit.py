@@ -312,3 +312,29 @@ def _attempt_block_job(ls: LanguageServer, job: BlockJob):
         # to try applying the job again.
         log.info(f'ATTEMPT_BLOCK_JOB: {e}')
         return False
+
+
+##################################################
+# Smart constructors
+
+def init_block(edit_name, tags, uri, range, edits):
+    ''' Insert new tags, demarcating a new block at the end of the highlighted
+    range. '''
+    tags = '\n'.join(tags)
+    job = InsertJob(
+        uri=uri,
+        text=tags,
+        line=range.end.line+1,
+        column=0,
+        strict=True,
+    )
+    edits.add_job(edit_name, job)
+
+
+def cleanup_block(edit_name, tags, uri, edits):
+    ''' Delete tags that demarcated a block. '''
+    edits.add_job(edit_name, DeleteJob(
+        uri=uri,
+        regexs=tags,
+        strict=True,
+    ))

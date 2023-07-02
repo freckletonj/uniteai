@@ -206,6 +206,15 @@ class SpeechRecognition:
             pass
 
 
+##################################################
+
+def configure(config, parser):
+    # Transcription
+    parser.add_argument('--transcription_model_size', default=config.get('transcription_model_size', None))
+    parser.add_argument('--transcription_model_path', default=config.get('transcription_model_path', None))
+    parser.add_argument('--transcription_energy_threshold', default=config.get('transcription_energy_threshold', None))
+
+
 @server.command('command.transcribeStream')
 def transcribe_stream(ls: LanguageServer, args):
     if ls.is_transcription_running.is_set():
