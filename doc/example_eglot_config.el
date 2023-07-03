@@ -53,162 +53,71 @@
 
 
 ;;;;;;;;;;
-;; MARKERS
 
-(cl-defstruct marker-data
-  "A structure for marker data. Contains the marker, its overlay, and associated colors."
-  (marker (make-marker))
-  (overlay nil)
-  (face 'highlight))
-
-(defvar-local markers-plist
-  `(:transcription ,(make-marker-data :marker (point-marker) :face 'hi-yellow)
-    :local ,(make-marker-data :marker (point-marker) :face 'hi-green)
-    :api ,(make-marker-data :marker (point-marker) :face 'hi-blue))
-  )
-
-(defun get-marker-column (marker)
-  "Get column number of a marker"
-  (save-excursion
-    (goto-char marker)
-    (current-column)))
-
-(defun marker-set (keyword)
-  "Update an Emacs marker in the markers-plist."
+;; Global stopping
+(defun eglot-stop ()
   (interactive)
-  (let ((marker-data (plist-get markers-plist keyword)))
-    (when marker-data
-      (setf (marker-data-marker marker-data) (point-marker))
-      (plist-put markers-plist keyword marker-data)
-      (marker-update-command markers-plist)
-      )))
+  (let* ((server (eglot--current-server-or-lose))
+         (doc (eglot--TextDocumentIdentifier)))
+    (eglot-execute-command server 'command.stop (vector doc))))
 
-(defun convert-markers-plist (original-plist)
-  "Converts original-plist into a new plist where each keyword is coupled to line number and character number"
-  (let ((new-plist '())
-        (current-plist original-plist))
-    (while current-plist
-      (let* ((key (pop current-plist))
-             (value (pop current-plist))
-             (marker (marker-data-marker value))
-             (line-number (line-number-at-pos marker))
-             (character-number (get-marker-column marker)))
-        (setq new-plist (append new-plist
-                                (list key
-                                      (list :line line-number
-                                            :character character-number))))))
-    new-plist))
-
-(defun marker-update-command (marker-data-plist)
-  "Update markers and send marker positions to the LSP server."
+;; Example Counter
+(defun eglot-example-counter ()
   (interactive)
-  ;; build jsonifyable plist of markers
-  (let* ((doc (eglot--TextDocumentIdentifier))
-         (params (convert-markers-plist marker-data-plist))
-         (args (vector doc params)))
-    (message "CALLING UPDATE: %s" args)
-    (eglot-execute-command (eglot--current-server-or-lose) 'command.markerUpdate args))
-
-  ;; Remove the old overlays, if any
-  (mapc (lambda (marker-data)
-          (let ((overlay (marker-data-overlay marker-data)))
-            (when (overlayp overlay)
-              (delete-overlay overlay))))
-        ;; plist values
-        (cl-loop for (_ v) on marker-data-plist by #'cddr collect v)
-        )
-
-  ;; Create new overlays at the marker's positions
-  (mapc (lambda (marker-data)
-          (let ((marker (marker-data-marker marker-data)))
-            (when (marker-buffer marker)  ;; only when marker is not nil
-              (let ((marker-pos (marker-position marker)))
-                (setf (marker-data-overlay marker-data) (make-overlay marker-pos (1+ marker-pos)))
-                (overlay-put (marker-data-overlay marker-data) 'face (marker-data-face marker-data))))))
-        ;; plist values
-        (cl-loop for (_ v) on marker-data-plist by #'cddr collect v)
-        )
-  )
-
-(defun marker-update-hook (begin end length)
-  "Call `marker-update-command' if the current buffer is managed by Eglot."
-  (message "TRYING UPDATE HOOK")
-  (when (bound-and-true-p eglot--managed-mode)
-    (let ((markers-affected (cl-some (lambda (marker-data) (<= begin (marker-position (marker-data-marker marker-data))))
-                                     (list (plist-get markers-plist :transcription)
-                                           (plist-get markers-plist :local)
-                                           (plist-get markers-plist :api)))))
-      (when markers-affected
-        (marker-update-command markers-plist)))))
-
-(add-hook 'after-change-functions #'marker-update-hook)
-
-
-;;;;;;;;;;
-
-(defun eglot-code-action-openai-gpt ()
-  (interactive)
-  (unless mark-active
-    (error "No region selected"))
-  (marker-set :api)
   (let* ((server (eglot--current-server-or-lose))
          (doc (eglot--TextDocumentIdentifier))
-         (range (list :start (eglot--pos-to-lsp-position (region-beginning))
-                      :end (eglot--pos-to-lsp-position (region-end)))))
-    (eglot-execute-command server 'command.openaiAutocompleteStream (vector doc range "FROM_CONFIG_COMPLETION" "FROM_CONFIG"))))
+         (pos (eglot--pos-to-lsp-position (point))))
+    (eglot-execute-command server 'command.exampleCounter (vector doc pos))))
 
-(defun eglot-code-action-openai-chatgpt ()
+;; Local LLM
+(defun eglot-local-llm ()
   (interactive)
   (unless mark-active
     (error "No region selected"))
-  (marker-set :api)
-  (let* ((server (eglot--current-server-or-lose))
-         (doc (eglot--TextDocumentIdentifier))
-         (range (list :start (eglot--pos-to-lsp-position (region-beginning))
-                      :end (eglot--pos-to-lsp-position (region-end)))))
-    (eglot-execute-command server 'command.openaiAutocompleteStream (vector doc range "FROM_CONFIG_CHAT" "FROM_CONFIG"))))
-
-(defun eglot-code-action-local-llm ()
-  (interactive)
-  (unless mark-active
-    (error "No region selected"))
-  (marker-set :local)
   (let* ((server (eglot--current-server-or-lose))
          (doc (eglot--TextDocumentIdentifier))
          (range (list :start (eglot--pos-to-lsp-position (region-beginning))
                       :end (eglot--pos-to-lsp-position (region-end)))))
     (eglot-execute-command server 'command.localLlmStream (vector doc range))))
 
-(defun eglot-code-action-stop-local-llm ()
+;; Transcription
+(defun eglot-transcribe ()
   (interactive)
-  (eglot-execute-command (eglot--current-server-or-lose) 'command.localLlmStreamStop '()))
-
-(defun eglot-code-action-transcribe-stream ()
-  (interactive)
-  (marker-set :transcription)
   (let* ((server (eglot--current-server-or-lose))
-         (doc (eglot--TextDocumentIdentifier)))
-    (eglot-execute-command server 'command.transcribeStream (vector doc))))
+         (doc (eglot--TextDocumentIdentifier))
+         (pos (eglot--pos-to-lsp-position (point))))
+    (eglot-execute-command server 'command.transcribe (vector doc pos))))
 
-(defun eglot-code-action-stop-transcribe-stream ()
+;; OpenAI
+(defun eglot-openai-gpt ()
   (interactive)
-  (eglot-execute-command (eglot--current-server-or-lose) 'command.stopTranscribeStream '()))
+  (unless mark-active
+    (error "No region selected"))
+  (let* ((server (eglot--current-server-or-lose))
+         (doc (eglot--TextDocumentIdentifier))
+         (range (list :start (eglot--pos-to-lsp-position (region-beginning))
+                      :end (eglot--pos-to-lsp-position (region-end)))))
+    (eglot-execute-command server 'command.openaiAutocompleteStream (vector doc range "FROM_CONFIG_COMPLETION" "FROM_CONFIG"))))
 
-
-
-;;;;;;;;;;
+(defun eglot-openai-chatgpt ()
+  (interactive)
+  (unless mark-active
+    (error "No region selected"))
+  (let* ((server (eglot--current-server-or-lose))
+         (doc (eglot--TextDocumentIdentifier))
+         (range (list :start (eglot--pos-to-lsp-position (region-beginning))
+                      :end (eglot--pos-to-lsp-position (region-end)))))
+    (eglot-execute-command server 'command.openaiAutocompleteStream (vector doc range "FROM_CONFIG_CHAT" "FROM_CONFIG"))))
 
 (add-hook 'llm-mode-hook
           (lambda ()
-            (define-key llm-mode-map (kbd "C-c l g") 'eglot-code-action-openai-gpt)
-            (define-key llm-mode-map (kbd "C-c l c") 'eglot-code-action-openai-chatgpt)
-            (define-key llm-mode-map (kbd "C-c l l") 'eglot-code-action-local-llm)
-            (define-key llm-mode-map (kbd "C-c C-c") 'eglot-code-action-local-llm)
-            (define-key llm-mode-map (kbd "C-c l s") 'eglot-code-action-stop-local-llm)
-
-            (define-key llm-mode-map (kbd "C-c l v") 'eglot-code-action-transcribe-stream)
-            (define-key llm-mode-map (kbd "C-c l b") 'eglot-code-action-stop-transcribe-stream)
-
+            (define-key llm-mode-map (kbd "C-c l s") 'eglot-stop)
+            (define-key llm-mode-map (kbd "C-c l e") 'eglot-example-counter)
+            (define-key llm-mode-map (kbd "C-c l l") 'eglot-local-llm)
+            (define-key llm-mode-map (kbd "C-c C-c") 'eglot-local-llm)
+            (define-key llm-mode-map (kbd "C-c l v") 'eglot-transcribe)
+            (define-key llm-mode-map (kbd "C-c l g") 'eglot-openai-gpt)
+            (define-key llm-mode-map (kbd "C-c l c") 'eglot-openai-chatgpt)
             (eglot-ensure)))
 
 (require 'eglot)

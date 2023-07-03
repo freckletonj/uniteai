@@ -46,7 +46,7 @@ import threading
 import torch
 import yaml
 import multiprocessing as mp
-import queue
+import logging
 
 
 ##################################################
@@ -84,7 +84,7 @@ def load_model():
     )
     model = AutoModelForCausalLM.from_pretrained(
         pretrained_model_name_or_path=model_path,
-        torch_dtype=torch.bfloat16,
+        torch_dtype=torch.float16,
         trust_remote_code=True,
         revision='DOESNT ACTUALLY WORK',
         device_map="auto",
@@ -102,7 +102,7 @@ local_llm_stop_event = mp.Event()
 STREAM_TOK = '\n'
 
 
-def local_llm_stream_(request, q, streamer, local_llm_stop_event):
+def local_llm_stream_(request, streamer, local_llm_stop_event):
     def custom_stopping_criteria(local_llm_stop_event):
         def f(input_ids: torch.LongTensor,
               score: torch.FloatTensor,
@@ -125,18 +125,30 @@ def local_llm_stream_(request, q, streamer, local_llm_stop_event):
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.eos_token_id,  # for open-end generation
         stopping_criteria=stopping_criteria,
+        # important for when model is accessed from other threads
+        #   https://github.com/h2oai/h2ogpt/pull/297/files
+        use_cache=False,
     )
-    model.generate(**generation_kwargs)
-    # BLOCKS
+    try:
+        model.generate(**generation_kwargs)  # blocks
+    except RuntimeError as e:
+        # NOTE: Falcon randomly produces errors like:
+        #       mat1 and mat2 shapes cannot be multiplied
+        streamer.on_finalized_text(f'\n<LLM SERVER ERROR: {e}>',
+                                   stream_end=True)
+    print('DONE GENERATING')
 
 
 def stream_results(streamer):
     for x in streamer:
+        # Stream response, and stop early if requested
         if not local_llm_stop_event.is_set():
+            print(f'yield: {x}')
             yield (
                 AutocompleteResponse(generated_text=x).json() + STREAM_TOK
             ).encode('utf-8')
         else:
+            print('STOP WAS SET')
             break
 
 
@@ -148,11 +160,9 @@ def local_llm_stream(request: AutocompleteRequest):
         tokenizer,
         skip_special_tokens=True  # eg <|endoftext|>
     )
-    q = queue.Queue()
     threading.Thread(target=local_llm_stream_,
                      args=(
                          request,
-                         q,
                          streamer,
                          local_llm_stop_event
                      )).start()

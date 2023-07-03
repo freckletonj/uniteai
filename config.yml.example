@@ -1,16 +1,39 @@
-# OpenAI
-openai_completion_engine: 'text-davinci-002'
-openai_chat_engine: 'gpt-3.5-turbo'
-# openai_chat_engine: 'gpt-4'
-openai_max_length: 1000
 
+
+##########
+# LSP
+lsp_port: 5033  # editor connects to LSP via this port
+modules:
+  - llmpal.local_llm
+  - llmpal.transcription
+  - llmpal.openai
+  - llmpal.example
+
+##########
+# Example Counting Feature
+
+start_digit: 13
+end_digit: 42
+delay: 0.4
+
+##########
 # Local Model
 model_path: '/home/me/path/to/falcon-7b-instruct/'
 model_commit: 'Unfortunately, Transformers doesnt actually dbl check this, but should.'
 local_max_length: 1000
 top_k: 10
-llm_port: 8000
+llm_port: 8000  # LSP connects to LLM server via this port
 llm_uri: 'http://localhost:8000'
 
-# LSP
-lsp_port: 5033
+##########
+# Transcription
+transcription_model_size: 'base'  # tiny, base, small, medium, large-v2
+transcription_model_path: '/home/path/to/whisper'
+transcription_volume_threshold: 1400  # see `speech_recognition` docs for energy threshold
+
+##########
+# OpenAI
+openai_api_key: sk-...
+openai_completion_engine: 'text-davinci-002'
+openai_chat_engine: 'gpt-3.5-turbo'
+openai_max_length: 1000
