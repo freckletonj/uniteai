@@ -29,7 +29,7 @@ llm_uri: 'http://localhost:8000'
 # Transcription
 transcription_model_size: 'base'  # tiny, base, small, medium, large-v2
 transcription_model_path: '/home/path/to/whisper'
-transcription_energy_threshold: 1400  # see `speech_recognition` docs
+transcription_volume_threshold: 1400  # see `speech_recognition` docs for energy threshold
 
 ##########
 # OpenAI

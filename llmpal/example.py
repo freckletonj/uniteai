@@ -12,7 +12,7 @@ from lsprotocol.types import (
     CodeActionKind,
     CodeActionParams,
     Command,
-    Range,
+    Position,
     TextDocumentIdentifier,
     WorkspaceEdit,
 )
@@ -24,12 +24,9 @@ import logging
 import time
 
 from llmpal.edit import init_block, cleanup_block, BlockJob
-from llmpal.common import extract_range, find_block, mk_logger
+from llmpal.common import find_block, mk_logger
 from llmpal.server import Server
 
-
-##################################################
-# OpenAI
 
 START_TAG = ':START_EXAMPLE:'
 END_TAG = ':END_EXAMPLE:'
@@ -70,8 +67,7 @@ class ExampleActor(Actor):
         # Start
         if command == 'start':
             uri = msg.get('uri')
-            range = msg.get('range')
-            prompt = msg.get('prompt')
+            cursor_pos = msg.get('cursor_pos')
             engine = msg.get('engine')
             max_length = msg.get('max_length')
             edits = msg.get('edits')
@@ -82,9 +78,9 @@ class ExampleActor(Actor):
                                             doc)
 
             if not (start_ixs and end_ixs):
-                init_block(NAME, self.tags, uri, range, edits)
+                init_block(NAME, self.tags, uri, cursor_pos, edits)
 
-            self.start(uri, range, prompt, engine, max_length, edits)
+            self.start(uri, cursor_pos, engine, max_length, edits)
 
         ##########
         # Stop
@@ -98,7 +94,7 @@ class ExampleActor(Actor):
             self.end_digit = msg.get('end_digit')
             self.delay = msg.get('delay')
 
-    def start(self, uri, range, prompt, engine, max_length, edits):
+    def start(self, uri, cursor_pos, engine, max_length, edits):
         if self.is_running:
             log.info('WARN: ON_START_BUT_RUNNING')
             return
@@ -107,7 +103,7 @@ class ExampleActor(Actor):
         self.is_running = True
         self.should_stop.clear()
         self.current_future = self.executor.submit(
-            self.stream_fn, uri, prompt, self.should_stop, edits
+            self.stream_fn, uri, self.should_stop, edits
         )
         log.debug('START CAN RETURN')
 
@@ -123,8 +119,8 @@ class ExampleActor(Actor):
             self.current_future = None
         log.debug('FINALLY STOPPED')
 
-    def stream_fn(self, uri, prompt, stop_event, edits):
-        log.debug('START: OPENAI_STREAM_FN')
+    def stream_fn(self, uri, stop_event, edits):
+        log.debug('START: EXAMPLE_STREAM_FN')
         try:
             # Stream the results to LSP Client
             running_text = ''
@@ -163,7 +159,7 @@ class ExampleActor(Actor):
             edits.add_job(NAME, job)
 
         except Exception as e:
-            log.error(f'Error: Local LLM, {e}')
+            log.error(f'Error: ExapleActor, {e}')
 
         # Cleanup
         log.debug('CLEANING UP')
@@ -177,9 +173,11 @@ def code_action_example(start_digit: int,
                         end_digit: int,
                         delay: int,
                         params: CodeActionParams):
+    ''' A code_action triggers a command, which sends a message to the Actor,
+    to handle it. '''
     text_document = params.text_document
     # position of the highlighted region in the client's editor
-    range = params.range
+    cursor_pos = params.cursor_pos
     return CodeAction(
         title='Example Counter',
         kind=CodeActionKind.Refactor,
@@ -187,7 +185,7 @@ def code_action_example(start_digit: int,
             title='Example Counter',
             command='command.exampleCounter',
             # Note: these arguments get jsonified, not passed as python objs
-            arguments=[text_document, range, start_digit, end_digit, delay]
+            arguments=[text_document, cursor_pos, start_digit, end_digit, delay]
         )
     )
 
@@ -234,20 +232,16 @@ def initialize(config, server):
     @server.command('command.exampleCounter')
     def example_counter(ls: Server, args):
         text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
-        range = ls.converter.structure(args[1], Range)
+        cursor_pos = ls.converter.structure(args[1], Position)
         uri = text_document.uri
         doc = ls.workspace.get_document(uri)
         doc_source = doc.source
-
-        # Extract the highlighted region
-        prompt = extract_range(doc_source, range)
 
         # Send a message to start the stream
         actor_args = {
             'command': 'start',
             'uri': uri,
-            'range': range,
-            'prompt': prompt,
+            'cursor_pos': cursor_pos,
             'start_digit': start_digit,
             'end_digit': end_digit,
             'delay': delay,

@@ -4,7 +4,7 @@ Transcribe Speech.
 
 '''
 
-
+from thespian.actors import Actor
 from typing import List
 import pygls
 from pygls.server import LanguageServer
@@ -40,61 +40,23 @@ from dataclasses import dataclass
 from typing import List, Tuple
 import re
 import itertools
+import argparse
 
-from llmpal.common import ThreadSafeCounter
-
-
-##########
-# Util
-
-def filter_alphanum(x: str) -> str:
-    ''' keep only alphanum, not even spaces nor punctuation. '''
-    return re.sub(r'\W+', '', x)
+from llmpal.common import ThreadSafeCounter, mk_logger, find_block
+from llmpal.edit import BlockJob, cleanup_block, init_block
 
 
-filter_list = [
-    filter_alphanum(x) # removes spaces
-    for x in
-    [
-        '',
-        'bye',
-        'you',
-        'thank you',
-        'thanks for watching',
-    ]
-]
+START_TAG = ':START_TRANSCRIPTION:'
+END_TAG = ':END_TRANSCRIPTION:'
+NAME = 'transcription'
+
+# A custom logger for just this feature. You can tune the log level to turn
+# on/off just this feature's logs.
+log = mk_logger(NAME, logging.DEBUG)
 
 
-def filter_out(x: str) -> bool:
-    x = filter_alphanum(x)
-    if len(x) < 4:
-        return True
-    return x.strip().lower() in filter_list
-
-def remove_regex(ls, tags, doc, uri, version):
-    removals = itertools.chain.from_iterable(
-        [find_pattern_in_document(doc, tag)for tag in tags]
-    )
-    removals = [
-        (Position(i, s),
-         Position(i, e),
-         ''  # remove original tags
-         )
-        for i, s, e in removals
-    ]
-    edit = workspace_edits(uri,
-                           version,
-                           removals
-                           )
-    print(f'{edit} \nWORKSPACE EDITS')
-    params = ApplyWorkspaceEditParams(edit=edit)
-    futu = ls.lsp.send_request("workspace/applyEdit", params)
-    # res = futu.result()
-    # print(f'RESTULT: {res}')
-
-
-##########
-# Speech Recognition setup
+##################################################
+# SpeechRecognition
 
 class SpeechRecognition:
     def __init__(self,
@@ -135,27 +97,33 @@ class SpeechRecognition:
         warmup_thread.daemon = True
         warmup_thread.start()
 
-    def listen_worker(self, current_i, ls):
-        print('STARTING L WORKER')
+    def listen_worker(self, should_stop, listen_worker_is_running):
+        log.debug('STARTING L WORKER')
+        listen_worker_is_running.set()
         with sr.Microphone() as source:
             try:
-                while not ls.stop_transcription.is_set():
-                    print('LISTEN AUDIO')
+                while not should_stop.is_set():
+                    log.debug('LISTEN AUDIO')
                     # blocks, and prevents while-loop from terminating when
                     # required
-                    audio = self.r.listen(source)
-
-                    # check if thread was deprecated while r.listen blocked
-                    if self.transcription_counter.get() > current_i:
-                        break
+                    audio = self.r.listen(source, timeout=0.5)
                     self.audio_queue.put(audio, block=False)
             except KeyboardInterrupt:
                 pass
-        print('DONE LISTENING')
 
-    def transcribe_worker(self, current_i, ls, uri, version):
+        # Drain audio queue
+        try:
+            while True:
+                self.audio_queue.get(False)
+        except Empty:
+            pass
+        listen_worker_is_running.clear()
+        log.debug('DONE LISTENING')
+
+    def transcription_worker(self, uri, edits, should_stop, transcription_worker_is_running):
+        transcription_worker_is_running.set()
         running_transcription = ""  # keep, for calculating offsets from marker
-        while not ls.stop_transcription.is_set():
+        while not should_stop.is_set():
             try:
                 # non-blocking, to more frequently allow the
                 # `stop_transcription` signal to end this thread.
@@ -163,10 +131,6 @@ class SpeechRecognition:
             except Empty:
                 time.sleep(0.2)
                 continue
-
-            # break out if this thread has been deprecated
-            if self.transcription_counter.get() > current_i:
-                break
 
             try:
                 x = self.r.recognize_whisper(audio,
@@ -176,97 +140,236 @@ class SpeechRecognition:
                                                  download_root=self.model_path
                                              ), language='english').strip()
 
-                print(f'TRANSCRIPTION: {x}')
+                log.debug(f'TRANSCRIPTION: {x}')
                 if filter_out(x):
                     continue
 
                 # Add space to respect next loop of transcription
                 running_transcription += x + ' '
-                job = Job(
-                    uri,
-                    f':START_TRANSCRIPTION:{current_i}:',
-                    f':END_TRANSCRIPTION:{current_i}:',
-                    f'\n{running_transcription}\n'
+                job = BlockJob(
+                    uri=uri,
+                    start_tag=START_TAG,
+                    end_tag=END_TAG,
+                    text=f'\n{running_transcription}\n',
+                    strict=False,
                 )
-                ls.edit_jobs['transcription'].put(job)
+                edits.add_job(NAME, job)
             except sr.UnknownValueError:
-                print("ERROR: could not understand audio")
+                log.debug("ERROR: could not understand audio")
             self.audio_queue.task_done()
-        print('DONE TRANSCRIBING')
 
-    def terminate_transcription(self, ls):
-        ls.stop_transcription.set()
-        ls.is_transcription_running.clear()
+        cleanup_block(NAME, [START_TAG, END_TAG], uri, edits)
+        should_stop.clear()
+        transcription_worker_is_running.clear()
+        log.debug('DONE TRANSCRIBING')
 
-        # drain audio queue
-        try:
-            while True:
-                self.audio_queue.get(False)
-        except Empty:
-            pass
+
+
+##################################################
+# Actor
+
+class TranscriptionActor(Actor):
+    def __init__(self):
+        self.listen_worker_is_running = Event()
+        self.transcription_worker_is_running = Event()
+        self.should_stop = Event()
+        self.tags = [START_TAG, END_TAG]
+        self.speech_recognition = None  # set during initialization
+        # Executor can have more than 2 threads (eg listen+transcribe), because listen threads block on listening. This means they cannot get a stop signal until audio comes through and they unblock.
+        self.executor = ThreadPoolExecutor(max_workers=5)
+        self.listen_thread_future = None
+        self.transcription_thread_future = None
+
+        # set during set_config
+        self.model_path = None
+        self.model_size = None
+        self.volume_threshold = None
+
+    def receiveMessage(self, msg, sender):
+        command = msg.get('command')
+        edits = msg.get('edits')
+
+        log.debug(
+            f'%%%%%%%%%%'
+            f'ACTOR RECV: {msg["command"]}'
+            f'ACTOR STATE:'
+            f'is_running: {self.is_running}'
+            f'locked: {self.should_stop.is_set()}'
+            f'listen_thread_future: {self.listen_thread_future}'
+            f'transcription_thread_future: {self.transcription_thread_future}'
+            f''
+            f'EDITS STATE:'
+            f'job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread else "NOT STARTED"}'
+            f'%%%%%%%%%%'
+        )
+
+        ##########
+        # Start
+        if command == 'start':
+            uri = msg.get('uri')
+            cursor_pos = msg.get('cursor_pos')
+            doc = msg.get('doc')
+
+            # check if block already exists
+            start_ixs, end_ixs = find_block(START_TAG,
+                                            END_TAG,
+                                            doc)
+            # make block
+            if not (start_ixs and end_ixs):
+                init_block(NAME, self.tags, uri, cursor_pos, edits)
+
+            self.start(uri, cursor_pos, edits)
+
+        ##########
+        # Stop
+        elif command == 'stop':
+            self.stop()
+
+        ##########
+        # Set Config
+        elif command == 'set_config':
+            config = msg.get('config')
+            self.model_path = config.transcription_model_path
+            self.model_size = config.transcription_model_size
+            self.volume_threshold = config.transcription_volume_threshold
+
+        elif command == 'initialize':
+            self.speech_recognition = SpeechRecognition(
+                self.model_path,
+                self.model_size,
+                self.volume_threshold
+            )
+
+            # load the model into GPU
+            self.speech_recognition.warmup()
+
+    def start(self, uri, cursor_pos, edits):
+        lw_set = self.listen_worker_is_running.is_set()
+        tw_set = self.transcription_worker_is_running.is_set()
+        if lw_set or tw_set:
+            log.info(f'WARN: ON_START_BUT_RUNNING. '
+                     f'listen_worker is running={lw_set}. '
+                     f'transcription_worker is running={tw_set}')
+            return
+        log.debug('ACTOR START')
+        self.should_stop.clear()
+
+        # Audio Listener
+        self.listen_thread_future = self.executor.submit(
+            self.speech_recognition.listen_worker,
+            self.should_stop, self.listen_worker_is_running)
+
+        # Transcriber
+        self.transcription_thread_future = self.executor.submit(
+            self.speech_recognition.transcription_worker,
+            uri, edits, self.should_stop, self.transcription_worker_is_running)
+
+        log.debug('START CAN RETURN')
+
+    def stop(self):
+        log.debug('ACTOR STOP')
+        if not self.is_running.is_set():
+            log.info('WARN: ON_STOP_BUT_STOPPED')
+
+        self.should_stop.set()
+
+        if self.listen_thread_future:
+            log.debug('Waiting for audio `listen_thread_future` to terminate')
+            self.listen_thread_future.result()  # block, wait to finish
+            self.listen_thread_future = None  # reset
+
+        if self.transcription_thread_future:
+            log.debug('Waiting for audio `transcription_thread_future` to terminate')
+            self.transcription_thread_future.result()  # block, wait to finish
+            self.transcription_thread_future = None  # reset
+
+        log.debug('FINALLY STOPPED')
+
+
+##########
+# Util
+
+def filter_alphanum(x: str) -> str:
+    ''' keep only alphanum, not even spaces nor punctuation. '''
+    return re.sub(r'\W+', '', x)
+
+
+filter_list = [
+    filter_alphanum(x)  # removes spaces
+    for x in
+    [
+        '',
+        'bye',
+        'you',
+        'thank you',
+        'thanks for watching',
+    ]
+]
+
+
+def filter_out(x: str) -> bool:
+    x = filter_alphanum(x)
+    if len(x) < 4:
+        return True
+    return x.strip().lower() in filter_list
+
+
+def code_action_transcribe(params: CodeActionParams):
+    '''Trigger a ChatGPT response. A code action calls a command, which is set
+    up below to `tell` the actor to start streaming a response. '''
+    text_document = params.text_document
+    cursor_pos = params.cursor_pos
+    return CodeAction(
+        title='Transcribe',
+        kind=CodeActionKind.Refactor,
+        command=Command(
+            title='Transcribe',
+            command='command.transcribe',
+            # Note: these arguments get jsonified, not passed as python objs
+            arguments=[text_document, cursor_pos]
+        )
+    )
 
 
 ##################################################
 
-def configure(config, parser):
-    # Transcription
-    parser.add_argument('--transcription_model_size', default=config.get('transcription_model_size', None))
-    parser.add_argument('--transcription_model_path', default=config.get('transcription_model_path', None))
-    parser.add_argument('--transcription_energy_threshold', default=config.get('transcription_energy_threshold', None))
+def configure(config_yaml):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--transcription_model_size', default=config_yaml.get('transcription_model_size', None))
+    parser.add_argument('--transcription_model_path', default=config_yaml.get('transcription_model_path', None))
+    parser.add_argument('--transcription_volume_threshold', default=config_yaml.get('transcription_volume_threshold', None))
+    return parser.parse_args()
 
 
-@server.command('command.transcribeStream')
-def transcribe_stream(ls: LanguageServer, args):
-    if ls.is_transcription_running.is_set():
-        terminate_transcription(ls)
-        time.sleep(0.1)  # allow threads to clean up (TODO: messy)
+def initialize(config: argparse.Namespace, server):
+    # Actor
+    server.add_actor(NAME, TranscriptionActor)
+    server.tell_actor(NAME, {
+        'command': 'set_config',
+        'config': config
+    })
+    server.tell_actor(NAME, {
+        'command': 'initialize'
+    })
 
-    ls.is_transcription_running.set()
-    ls.stop_transcription.clear()
+    # CodeActions
+    server.add_code_action(code_action_transcribe)
 
-    # remember the current iteration when this thread was started.
-    current_i = transcription_counter.increment()
-
-    # Prepare args
-    text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
-    uri = text_document.uri
-    doc = ls.workspace.get_document(uri)
-    version = doc.version
-
-    # Insert new Tags
-    cur = converter.structure(args[1], Position)
-    tags = '\n'.join([
-        f':START_TRANSCRIPTION:{current_i}:',
-        f':END_TRANSCRIPTION:{current_i}:',
-    ])
-    edit = workspace_edit(uri, version, cur, cur, tags)
-    params = ApplyWorkspaceEditParams(edit=edit)
-    ls.lsp.send_request("workspace/applyEdit", params)
-
-    listen_thread = Thread(target=listen_worker, args=(current_i, ls))
-    listen_thread.daemon = True
-    listen_thread.start()
-
-    transcribe_thread = Thread(target=transcribe_worker,
-                               args=(current_i, ls, uri, version))
-    transcribe_thread.daemon = True
-    transcribe_thread.start()
-
-    return {'status': 'success'}
-
-@server.thread()
-@server.command('command.stopTranscribeStream')
-def stop_transcribe_stream(ls: LanguageServer, args):
-    start_tag = r':START_TRANSCRIPTION:\d+:'
-    end_tag   = r':END_TRANSCRIPTION:\d+:'
-
-    text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
-    uri = text_document.uri
-    doc = ls.workspace.get_document(uri)
-
-    terminate_transcription(ls)
-
-    version = doc.version
-    remove_regex(ls, [start_tag, end_tag], doc.source, uri, version)
-
-    return {'status': 'success'}
+    # Modify Server
+    @server.thread()
+    @server.command('command.transcribe')
+    def transcribe_stream(ls: LanguageServer, args):
+        # Prepare args
+        text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
+        uri = text_document.uri
+        doc = ls.workspace.get_document(uri)
+        cursor_pos = ls.converter.structure(args[1], Position)
+        actor_args = {
+            'command': 'start',
+            'uri': uri,
+            'doc': doc.source,
+            'edits': ls.edits,
+            'cursor_pos': cursor_pos,
+        }
+        ls.tell_actor(NAME, actor_args)
+        return {'status': 'success'}

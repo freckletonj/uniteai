@@ -9,6 +9,7 @@ import pygls
 from pygls.server import LanguageServer
 from lsprotocol.types import (
     ApplyWorkspaceEditParams,
+    Range,
     Position,
 )
 
@@ -317,9 +318,18 @@ def _attempt_block_job(ls: LanguageServer, job: BlockJob):
 ##################################################
 # Smart constructors
 
-def init_block(edit_name, tags, uri, range, edits):
+def init_block(edit_name,
+               tags,
+               uri,
+               range_or_pos: Union[Range, Position],
+               edits):
     ''' Insert new tags, demarcating a new block at the end of the highlighted
     range. '''
+    if isinstance(range_or_pos, Range):
+        range = range_or_pos
+    elif isinstance(range_or_pos, Position):
+        range = Range(start=range_or_pos, end=range_or_pos)
+
     tags = '\n'.join(tags)
     job = InsertJob(
         uri=uri,

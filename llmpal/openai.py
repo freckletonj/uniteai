@@ -212,7 +212,7 @@ def openai_stream_fn(uri, prompt, engine, max_length, stop_event, edits):
         edits.add_job(NAME, job)
 
     except Exception as e:
-        log.error(f'Error: Local LLM, {e}')
+        log.error(f'Error: OpenAI, {e}')
 
 
 def code_action_gpt(engine, max_length, params: CodeActionParams):

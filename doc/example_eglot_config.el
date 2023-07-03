@@ -64,13 +64,10 @@
 ;; Example Counter
 (defun eglot-example-counter ()
   (interactive)
-  (unless mark-active
-    (error "No region selected"))
   (let* ((server (eglot--current-server-or-lose))
          (doc (eglot--TextDocumentIdentifier))
-         (range (list :start (eglot--pos-to-lsp-position (region-beginning))
-                      :end (eglot--pos-to-lsp-position (region-end)))))
-    (eglot-execute-command server 'command.exampleCounter (vector doc range))))
+         (pos (eglot--pos-to-lsp-position (point))))
+    (eglot-execute-command server 'command.exampleCounter (vector doc pos))))
 
 ;; Local LLM
 (defun eglot-local-llm ()
@@ -84,11 +81,12 @@
     (eglot-execute-command server 'command.localLlmStream (vector doc range))))
 
 ;; Transcription
-(defun eglot-transcribe-stream ()
+(defun eglot-transcribe ()
   (interactive)
   (let* ((server (eglot--current-server-or-lose))
-         (doc (eglot--TextDocumentIdentifier)))
-    (eglot-execute-command server 'command.transcribeStream (vector doc))))
+         (doc (eglot--TextDocumentIdentifier))
+         (pos (eglot--pos-to-lsp-position (point))))
+    (eglot-execute-command server 'command.transcribe (vector doc pos))))
 
 ;; OpenAI
 (defun eglot-openai-gpt ()
@@ -117,7 +115,7 @@
             (define-key llm-mode-map (kbd "C-c l e") 'eglot-example-counter)
             (define-key llm-mode-map (kbd "C-c l l") 'eglot-local-llm)
             (define-key llm-mode-map (kbd "C-c C-c") 'eglot-local-llm)
-            (define-key llm-mode-map (kbd "C-c l v") 'eglot-transcribe-stream)
+            (define-key llm-mode-map (kbd "C-c l v") 'eglot-transcribe)
             (define-key llm-mode-map (kbd "C-c l g") 'eglot-openai-gpt)
             (define-key llm-mode-map (kbd "C-c l c") 'eglot-openai-chatgpt)
             (eglot-ensure)))
