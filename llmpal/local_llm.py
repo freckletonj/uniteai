@@ -28,7 +28,7 @@ from llmpal.server import Server
 START_TAG = ':START_LOCAL:'
 END_TAG = ':END_LOCAL:'
 NAME = 'local_llm'
-log = mk_logger(NAME, logging.DEBUG)
+log = mk_logger(NAME, logging.WARN)
 
 
 class LocalLLMActor(Actor):
@@ -45,18 +45,17 @@ class LocalLLMActor(Actor):
         doc = msg.get('doc')
 
         edits = msg.get('edits')
-        log.debug(
-            f'%%%%%%%%%%'
-            f'ACTOR RECV: {msg["command"]}'
-            f'ACTOR STATE:'
-            f'is_running: {self.is_running}'
-            f'locked: {self.should_stop.is_set()}'
-            f'future: {self.current_future}'
-            f''
-            f'EDITS STATE:'
-            f'job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread else "NOT STARTED"}'
-            f'%%%%%%%%%%'
-        )
+        log.debug(f'''
+%%%%%%%%%%
+ACTOR RECV: {msg["command"]}
+ACTOR STATE:
+is_running: {self.is_running}
+should stop: {self.should_stop.is_set()}
+current_future: {self.current_future}
+
+EDITS STATE:
+job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread else "NOT STARTED"}
+%%%%%%%%%%''')
 
         ##########
         # Start

@@ -103,11 +103,12 @@ class SpeechRecognition:
         with sr.Microphone() as source:
             try:
                 while not should_stop.is_set():
-                    log.debug('LISTEN AUDIO')
-                    # blocks, and prevents while-loop from terminating when
-                    # required
-                    audio = self.r.listen(source, timeout=0.5)
-                    self.audio_queue.put(audio, block=False)
+                    log.debug(f'LISTEN AUDIO. should_stop={should_stop.is_set()}')
+                    try:
+                        audio = self.r.listen(source, timeout=0.5)
+                        self.audio_queue.put(audio, block=False)
+                    except sr.WaitTimeoutError:
+                        pass
             except KeyboardInterrupt:
                 pass
 
@@ -120,9 +121,10 @@ class SpeechRecognition:
         listen_worker_is_running.clear()
         log.debug('DONE LISTENING')
 
-    def transcription_worker(self, uri, edits, should_stop, transcription_worker_is_running):
+    def transcription_worker(self, uri, edits, should_stop,
+                             transcription_worker_is_running):
         transcription_worker_is_running.set()
-        running_transcription = ""  # keep, for calculating offsets from marker
+        running_transcription = ""
         while not should_stop.is_set():
             try:
                 # non-blocking, to more frequently allow the
@@ -159,7 +161,6 @@ class SpeechRecognition:
             self.audio_queue.task_done()
 
         cleanup_block(NAME, [START_TAG, END_TAG], uri, edits)
-        should_stop.clear()
         transcription_worker_is_running.clear()
         log.debug('DONE TRANSCRIBING')
 
@@ -175,7 +176,6 @@ class TranscriptionActor(Actor):
         self.should_stop = Event()
         self.tags = [START_TAG, END_TAG]
         self.speech_recognition = None  # set during initialization
-        # Executor can have more than 2 threads (eg listen+transcribe), because listen threads block on listening. This means they cannot get a stop signal until audio comes through and they unblock.
         self.executor = ThreadPoolExecutor(max_workers=5)
         self.listen_thread_future = None
         self.transcription_thread_future = None
@@ -188,20 +188,22 @@ class TranscriptionActor(Actor):
     def receiveMessage(self, msg, sender):
         command = msg.get('command')
         edits = msg.get('edits')
+        lw_set = self.listen_worker_is_running.is_set()
+        tw_set = self.transcription_worker_is_running.is_set()
+        log.debug(f'''
+%%%%%%%%%%
+ACTOR RECV: {msg["command"]}
+ACTOR STATE:
+listen_worker is running={lw_set}.
+transcription_worker is running={tw_set}
+should_stop: {self.should_stop.is_set()}
+listen_thread_future: {self.listen_thread_future}
+transcription_thread_future: {self.transcription_thread_future}
 
-        log.debug(
-            f'%%%%%%%%%%'
-            f'ACTOR RECV: {msg["command"]}'
-            f'ACTOR STATE:'
-            f'is_running: {self.is_running}'
-            f'locked: {self.should_stop.is_set()}'
-            f'listen_thread_future: {self.listen_thread_future}'
-            f'transcription_thread_future: {self.transcription_thread_future}'
-            f''
-            f'EDITS STATE:'
-            f'job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread else "NOT STARTED"}'
-            f'%%%%%%%%%%'
-        )
+EDITS STATE:
+job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread else "NOT STARTED"}
+%%%%%%%%%%
+''')
 
         ##########
         # Start
@@ -268,8 +270,12 @@ class TranscriptionActor(Actor):
 
     def stop(self):
         log.debug('ACTOR STOP')
-        if not self.is_running.is_set():
-            log.info('WARN: ON_STOP_BUT_STOPPED')
+        lw_set = self.listen_worker_is_running.is_set()
+        tw_set = self.transcription_worker_is_running.is_set()
+        if not lw_set or not tw_set:
+            log.info('WARN: ON_STOP_BUT_STOPPED'
+                     f'listen_worker is running={lw_set}. '
+                     f'transcription_worker is running={tw_set}')
 
         self.should_stop.set()
 
@@ -283,6 +289,7 @@ class TranscriptionActor(Actor):
             self.transcription_thread_future.result()  # block, wait to finish
             self.transcription_thread_future = None  # reset
 
+        self.should_stop.clear()
         log.debug('FINALLY STOPPED')
 
 
@@ -297,7 +304,7 @@ def filter_alphanum(x: str) -> str:
 filter_list = [
     filter_alphanum(x)  # removes spaces
     for x in
-    [
+    [  # quirks of Whisper
         '',
         'bye',
         'you',
@@ -309,8 +316,8 @@ filter_list = [
 
 def filter_out(x: str) -> bool:
     x = filter_alphanum(x)
-    if len(x) < 4:
-        return True
+    # if len(x) < 4:  # weed out short utterances
+    #     return True
     return x.strip().lower() in filter_list
 
 
@@ -318,7 +325,8 @@ def code_action_transcribe(params: CodeActionParams):
     '''Trigger a ChatGPT response. A code action calls a command, which is set
     up below to `tell` the actor to start streaming a response. '''
     text_document = params.text_document
-    cursor_pos = params.cursor_pos
+    range = params.range  # lsp spec only provides `Range`
+    cursor_pos = range.end
     return CodeAction(
         title='Transcribe',
         kind=CodeActionKind.Refactor,

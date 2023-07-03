@@ -177,7 +177,8 @@ def code_action_example(start_digit: int,
     to handle it. '''
     text_document = params.text_document
     # position of the highlighted region in the client's editor
-    cursor_pos = params.cursor_pos
+    range = params.range  # lsp spec only provides `Range`
+    cursor_pos = range.end
     return CodeAction(
         title='Example Counter',
         kind=CodeActionKind.Refactor,
