@@ -1,8 +1,11 @@
 '''
 
-A locally running LLM.
+Start building your feature off this example!
+
+This example inserts auto-incrementing numbers.
 
 '''
+
 
 from lsprotocol.types import (
     CodeAction,
@@ -11,29 +14,34 @@ from lsprotocol.types import (
     Command,
     Range,
     TextDocumentIdentifier,
+    WorkspaceEdit,
 )
-import requests
-import json
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from thespian.actors import Actor
-import logging
 import argparse
+import logging
+import time
 
 from llmpal.edit import init_block, cleanup_block, BlockJob
 from llmpal.common import extract_range, find_block, mk_logger
 from llmpal.server import Server
 
 
-START_TAG = ':START_LOCAL:'
-END_TAG = ':END_LOCAL:'
-NAME = 'local_llm'
+##################################################
+# OpenAI
+
+START_TAG = ':START_EXAMPLE:'
+END_TAG = ':END_EXAMPLE:'
+NAME = 'example'
+
+# A custom logger for just this feature. You can tune the log level to turn
+# on/off just this feature's logs.
 log = mk_logger(NAME, logging.DEBUG)
 
 
-class LocalLLMActor(Actor):
+class ExampleActor(Actor):
     def __init__(self):
-        log.debug('ACTOR INIT')
         self.is_running = False
         self.executor = ThreadPoolExecutor(max_workers=3)
         self.current_future = None
@@ -43,8 +51,8 @@ class LocalLLMActor(Actor):
     def receiveMessage(self, msg, sender):
         command = msg.get('command')
         doc = msg.get('doc')
-
         edits = msg.get('edits')
+
         log.debug(
             f'%%%%%%%%%%'
             f'ACTOR RECV: {msg["command"]}'
@@ -64,6 +72,8 @@ class LocalLLMActor(Actor):
             uri = msg.get('uri')
             range = msg.get('range')
             prompt = msg.get('prompt')
+            engine = msg.get('engine')
+            max_length = msg.get('max_length')
             edits = msg.get('edits')
 
             # check if block already exists
@@ -74,7 +84,7 @@ class LocalLLMActor(Actor):
             if not (start_ixs and end_ixs):
                 init_block(NAME, self.tags, uri, range, edits)
 
-            self.start(uri, range, prompt, edits)
+            self.start(uri, range, prompt, engine, max_length, edits)
 
         ##########
         # Stop
@@ -82,16 +92,13 @@ class LocalLLMActor(Actor):
             self.stop()
 
         ##########
-        # Config
+        # Set Config
         elif command == 'set_config':
-            self.model_path = msg.get('model_path')
-            self.model_commit = msg.get('model_commit')
-            self.local_max_length = msg.get('local_max_length')
-            self.top_k = msg.get('top_k')
-            self.llm_port = msg.get('llm_port')
-            self.llm_uri = msg.get('llm_uri')
+            self.start_digit = msg.get('start_digit')
+            self.end_digit = msg.get('end_digit')
+            self.delay = msg.get('delay')
 
-    def start(self, uri, range, prompt, edits):
+    def start(self, uri, range, prompt, engine, max_length, edits):
         if self.is_running:
             log.info('WARN: ON_START_BUT_RUNNING')
             return
@@ -99,9 +106,8 @@ class LocalLLMActor(Actor):
 
         self.is_running = True
         self.should_stop.clear()
-
         self.current_future = self.executor.submit(
-            self.local_llm_stream_fn, uri, prompt, self.should_stop, edits
+            self.stream_fn, uri, prompt, self.should_stop, edits
         )
         log.debug('START CAN RETURN')
 
@@ -117,49 +123,30 @@ class LocalLLMActor(Actor):
             self.current_future = None
         log.debug('FINALLY STOPPED')
 
-    def local_llm_stream_fn(self, uri, prompt, stop_event, edits):
-        log.debug('START: LOCAL_LLM_STREAM_FN')
+    def stream_fn(self, uri, prompt, stop_event, edits):
+        log.debug('START: OPENAI_STREAM_FN')
         try:
-            request_data = {
-                "text": prompt,
-                "max_length": self.local_max_length,
-                "do_sample": True,
-                "top_k": self.top_k,
-                "num_return_sequences": 1
-            }
-            # Stream response from LLM Server
-            response = requests.post(f"{self.llm_uri}/local_llm_stream",
-                                     json=request_data,
-                                     stream=True)
-            if response.status_code != 200:
-                raise Exception(
-                    f"POST request to {self.llm_uri} failed with status code "
-                    f"{response.status_code}"
-                )
-
             # Stream the results to LSP Client
             running_text = ''
-            for line in response.iter_lines():
+            for x in range(self.start_digit, self.end_digit+1):
                 # For breaking out early
                 if stop_event.is_set():
                     log.debug('STREAM_FN received STOP EVENT')
                     break
-                response_data = json.loads(line)
-                new_text = response_data["generated_text"]
-                log.debug(f'NEW: {new_text}')
-                # ignore empty strings
-                if len(new_text) == 0:
-                    continue
 
-                running_text += new_text
+                running_text += f'{x} '
                 job = BlockJob(
                     uri=uri,
                     start_tag=START_TAG,
                     end_tag=END_TAG,
                     text=f'\n{running_text}\n',
+                    # "non-strict" means that if this job doesn't get applied
+                    # successfully, it can be dropped. This is useful when
+                    # streaming.
                     strict=False,
                 )
                 edits.add_job(NAME, job)
+                time.sleep(self.delay)
 
             # Streaming is done, and those added jobs were all
             # non-strict. Let's make sure to have one final strict
@@ -186,50 +173,66 @@ class LocalLLMActor(Actor):
         self.should_stop.clear()
 
 
-def code_action_local_llm(params: CodeActionParams):
+def code_action_example(start_digit: int,
+                        end_digit: int,
+                        delay: int,
+                        params: CodeActionParams):
     text_document = params.text_document
+    # position of the highlighted region in the client's editor
     range = params.range
     return CodeAction(
-        title='Local LLM',
+        title='Example Counter',
         kind=CodeActionKind.Refactor,
         command=Command(
-            title='Local LLM',
-            command='command.localLlmStream',
-            # Note: these arguments get jsonified, not passed directly
-            arguments=[text_document, range]
+            title='Example Counter',
+            command='command.exampleCounter',
+            # Note: these arguments get jsonified, not passed as python objs
+            arguments=[text_document, range, start_digit, end_digit, delay]
         )
     )
 
 
 ##################################################
-# External API
+# Setup
+#
+# NOTE: In `config.yml`, just add `llmpal.example` under `modules`, and this
+#       will automatically get built into the server at runtime.
+#
 
 def configure(config_yaml):
     parser = argparse.ArgumentParser()
+    parser.add_argument('--start_digit', default=config_yaml.get('start_digit', None))
+    parser.add_argument('--end_digit', default=config_yaml.get('end_digit', None))
+    parser.add_argument('--delay', default=config_yaml.get('delay', None))
 
-    parser.add_argument('--model_path', default=config_yaml.get('model_path', None))
-    parser.add_argument('--model_commit', default=config_yaml.get('model_commit', None))
-    parser.add_argument('--local_max_length', default=config_yaml.get('local_max_length', None))
-    parser.add_argument('--top_k', default=config_yaml.get('top_k', None))
-    parser.add_argument('--llm_port', default=config_yaml.get('llm_port', None))
-    parser.add_argument('--llm_uri', default=config_yaml.get('llm_uri', None))
+    # These get picked up as `config` in `initialize`
     return parser.parse_args()
 
 
 def initialize(config, server):
+    # Config
+    start_digit = config.start_digit
+    end_digit = config.end_digit
+    delay = config.delay
+
     # Actor
-    server.add_actor(NAME, LocalLLMActor)
+    server.add_actor(NAME, ExampleActor)
+
+    # Initialize configuration in Actor
     server.tell_actor(NAME, {
         'command': 'set_config',
         **vars(config)  # argparse.Namespace -> dict
     })
 
     # CodeActions
-    server.add_code_action(code_action_local_llm)
+    server.add_code_action(
+        lambda params:
+        code_action_example(start_digit, end_digit, delay, params))
 
+    # Modify Server
     @server.thread()
-    @server.command('command.localLlmStream')
-    def local_llm_stream(ls: Server, args):
+    @server.command('command.exampleCounter')
+    def example_counter(ls: Server, args):
         text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
         range = ls.converter.structure(args[1], Range)
         uri = text_document.uri
@@ -245,7 +248,13 @@ def initialize(config, server):
             'uri': uri,
             'range': range,
             'prompt': prompt,
+            'start_digit': start_digit,
+            'end_digit': end_digit,
+            'delay': delay,
             'edits': ls.edits,
             'doc': doc_source,
         }
         ls.tell_actor(NAME, actor_args)
+
+        # Return null-edit immediately (the rest will stream)
+        return WorkspaceEdit()

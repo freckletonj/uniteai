@@ -7,6 +7,14 @@ modules:
   - llmpal.local_llm
   - llmpal.transcription
   - llmpal.openai
+  - llmpal.example
+
+##########
+# Example Counting Feature
+
+start_digit: 13
+end_digit: 42
+delay: 0.4
 
 ##########
 # Local Model

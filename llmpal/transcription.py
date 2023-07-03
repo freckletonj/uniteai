@@ -48,12 +48,12 @@ from llmpal.common import ThreadSafeCounter
 # Util
 
 def filter_alphanum(x: str) -> str:
-    ''' keep only alphanum, not even spaces. '''
+    ''' keep only alphanum, not even spaces nor punctuation. '''
     return re.sub(r'\W+', '', x)
 
 
 filter_list = [
-    filter_alphanum(x)
+    filter_alphanum(x) # removes spaces
     for x in
     [
         '',

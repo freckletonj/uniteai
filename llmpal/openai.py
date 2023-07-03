@@ -12,7 +12,6 @@ from lsprotocol.types import (
     Command,
     Range,
     TextDocumentIdentifier,
-    # VersionedTextDocumentIdentifier,
     WorkspaceEdit,
 )
 from concurrent.futures import ThreadPoolExecutor
@@ -22,8 +21,7 @@ from thespian.actors import Actor
 import argparse
 import logging
 
-from llmpal.edit import init_block, cleanup_block
-from llmpal.edit import BlockJob
+from llmpal.edit import init_block, cleanup_block, BlockJob
 from llmpal.common import extract_range, find_block, mk_logger
 from llmpal.server import Server
 
@@ -56,45 +54,41 @@ class OpenAIActor(Actor):
         self.tags = [START_TAG, END_TAG]
 
     def receiveMessage(self, msg, sender):
-        if isinstance(msg, dict):
-            command = msg.get('command')
-            doc = msg.get('doc')
-
+        command = msg.get('command')
+        doc = msg.get('doc')
+        edits = msg.get('edits')
+        log.debug(
+            f'%%%%%%%%%%'
+            f'ACTOR RECV: {msg["command"]}'
+            f'ACTOR STATE:'
+            f'is_running: {self.is_running}'
+            f'locked: {self.should_stop.is_set()}'
+            f'future: {self.current_future}'
+            f''
+            f'EDITS STATE:'
+            f'job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread else "NOT STARTED"}'
+            f'%%%%%%%%%%'
+        )
+        if command == 'start':
+            uri = msg.get('uri')
+            range = msg.get('range')
+            prompt = msg.get('prompt')
+            engine = msg.get('engine')
+            max_length = msg.get('max_length')
             edits = msg.get('edits')
-            log.debug(
-                f'%%%%%%%%%%'
-                f'ACTOR RECV: {msg["command"]}'
-                f'ACTOR STATE:'
-                f'is_running: {self.is_running}'
-                f'locked: {self.should_stop.is_set()}'
-                f'future: {self.current_future}'
-                f''
-                f'EDITS STATE:'
-                f'job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread else "NOT STARTED"}'
-                f'%%%%%%%%%%'
-            )
-            if command == 'start':
-                uri = msg.get('uri')
-                range = msg.get('range')
-                prompt = msg.get('prompt')
-                engine = msg.get('engine')
-                max_length = msg.get('max_length')
-                edits = msg.get('edits')
 
-                # check if block already exists
-                start_ixs, end_ixs = find_block(START_TAG,
-                                                END_TAG,
-                                                doc)
+            # check if block already exists
+            start_ixs, end_ixs = find_block(START_TAG,
+                                            END_TAG,
+                                            doc)
 
-                if not (start_ixs and end_ixs):
-                    init_block(NAME, self.tags, uri, range, edits)
+            if not (start_ixs and end_ixs):
+                init_block(NAME, self.tags, uri, range, edits)
 
-                self.start(uri, range, prompt, engine, max_length, edits)
+            self.start(uri, range, prompt, engine, max_length, edits)
 
-            elif command == 'stop':
-                uri = msg.get('uri')
-                edits = msg.get('edits')
-                self.stop()
+        elif command == 'stop':
+            self.stop()
 
     def start(self, uri, range, prompt, engine, max_length, edits):
         if self.is_running:
@@ -179,7 +173,6 @@ def openai_autocomplete(engine, text, max_length):
                 generated_text = delta['content']
                 yield generated_text
 
-
 def openai_stream_fn(uri, prompt, engine, max_length, stop_event, edits):
     log.debug('START: OPENAI_STREAM_FN')
     try:
@@ -189,7 +182,7 @@ def openai_stream_fn(uri, prompt, engine, max_length, stop_event, edits):
             # For breaking out early
             if stop_event.is_set():
                 log.debug('STREAM_FN received STOP EVENT')
-                return
+                break
             log.debug(f'NEW: {new_text}')
             # ignore empty strings
             if len(new_text) == 0:
@@ -223,6 +216,8 @@ def openai_stream_fn(uri, prompt, engine, max_length, stop_event, edits):
 
 
 def code_action_gpt(engine, max_length, params: CodeActionParams):
+    '''Trigger a GPT Autocompletion response. A code action calls a command,
+    which is set up below to `tell` the actor to start streaming a response.'''
     text_document = params.text_document
     range = params.range
     return CodeAction(
@@ -238,6 +233,8 @@ def code_action_gpt(engine, max_length, params: CodeActionParams):
 
 
 def code_action_chat_gpt(engine, max_length, params: CodeActionParams):
+    '''Trigger a ChatGPT response. A code action calls a command, which is set
+    up below to `tell` the actor to start streaming a response. '''
     text_document = params.text_document
     range = params.range
     return CodeAction(
@@ -288,6 +285,9 @@ def initialize(config, server):
     def openai_autocomplete_stream(ls: Server, args):
         text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
         range = ls.converter.structure(args[1], Range)
+        uri = text_document.uri
+        doc = ls.workspace.get_document(uri)
+        doc_source = doc.source
 
         # Determine engine, by checking for sentinel values to allow LSP client
         # to defer arguments to server's configuration.
@@ -303,12 +303,6 @@ def initialize(config, server):
             max_length = openai_max_length
         else:
             max_length = args[3]
-
-        text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
-        range = ls.converter.structure(args[1], Range)
-        uri = text_document.uri
-        doc = ls.workspace.get_document(uri)
-        doc_source = doc.source
 
         # Extract the highlighted region
         prompt = extract_range(doc_source, range)
