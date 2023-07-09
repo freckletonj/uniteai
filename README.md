@@ -36,7 +36,7 @@ This project seeks to answer that.
 
 ## Screencast Demo
 
-https://github.com/freckletonj/uniteai/raw/97eb50375e2e653749218c3cb8bffe29e69dc2a4/screencast.webm
+![uniteai screencast](./screencast.mp4)
 
 
 ## Capabilities
