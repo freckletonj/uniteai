@@ -17,7 +17,7 @@ from pygls.protocol import default_converter
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from thespian.actors import ActorSystem
-import llmpal.edit as edit
+import uniteai.edit as edit
 
 
 ##################################################
@@ -27,10 +27,6 @@ class Server(LanguageServer):
     def __init__(self, name, version):
         super().__init__(name, version)
         self.code_actions = []
-
-        # TODO: move
-        self.stop_transcription = Event()
-        self.is_transcription_running = Event()
 
         # A ThreadPool for tasks. By throwing long running tasks on here, LSP
         # endpoints can return immediately.
@@ -72,7 +68,7 @@ def initialize():
     '''
     A Barebones pygls LSP Server.
     '''
-    server = Server("llmpal", "0.1.0")
+    server = Server("uniteai", "0.1.0")
 
     @server.feature('workspace/didChangeConfiguration')
     def workspace_did_change_configuration(ls: Server, *args):
@@ -113,10 +109,10 @@ def initialize():
 
 def code_action_stop(params: CodeActionParams):
     return CodeAction(
-                title='Stop Local LLM',
+                title='Stop Streaming Things',
                 kind=CodeActionKind.Refactor,
                 command=Command(
-                    title='Stop Streaming',
+                    title='Stop Streaming Things',
                     command='command.stop'
                 )
             )

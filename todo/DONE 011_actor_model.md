@@ -1,4 +1,5 @@
-# 011 - Implement Actor Model
+# 011 - Implement Actor Model :DONE:
+
 
 - Generic Assistant
   - init_block: writes tags
@@ -17,3 +18,8 @@
 - API LLM
   - start streaming request
   - write out edits
+
+
+## DONE
+
+Implemented via `Thespian` library.

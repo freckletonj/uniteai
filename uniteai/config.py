@@ -34,6 +34,8 @@ def get_args():
     parser = argparse.ArgumentParser()
 
     # LSP-related config
+    parser.add_argument('--stdio', action='store_true', default=True)
+    parser.add_argument('--tcp', action='store_true')
     parser.add_argument('--lsp_port', default=config_yaml.get('lsp_port', None))
     parser.add_argument('--modules', default=config_yaml.get('modules', None))
 

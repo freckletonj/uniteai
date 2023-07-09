@@ -20,9 +20,9 @@ from thespian.actors import Actor
 import logging
 import argparse
 
-from llmpal.edit import init_block, cleanup_block, BlockJob
-from llmpal.common import extract_range, find_block, mk_logger
-from llmpal.server import Server
+from uniteai.edit import init_block, cleanup_block, BlockJob
+from uniteai.common import extract_range, find_block, mk_logger
+from uniteai.server import Server
 
 
 START_TAG = ':START_LOCAL:'
@@ -212,7 +212,12 @@ def configure(config_yaml):
     parser.add_argument('--top_k', default=config_yaml.get('top_k', None))
     parser.add_argument('--llm_port', default=config_yaml.get('llm_port', None))
     parser.add_argument('--llm_uri', default=config_yaml.get('llm_uri', None))
-    return parser.parse_args()
+
+    # bc this is only concerned with local llm params, do not error if extra
+    # params are sent via cli.
+    args, _ = parser.parse_known_args()
+    return args
+
 
 
 def initialize(config, server):

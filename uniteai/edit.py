@@ -17,7 +17,7 @@ from threading import Thread
 from queue import Queue, Empty
 import time
 from dataclasses import dataclass
-from llmpal.common import find_tag, workspace_edit, workspace_edits, mk_logger
+from uniteai.common import find_tag, workspace_edit, workspace_edits, mk_logger
 import logging
 
 log = mk_logger('edit', logging.WARN)

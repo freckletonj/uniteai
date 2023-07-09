@@ -1,4 +1,21 @@
-;; ADD TO init.el
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; EGLOT CONFIGURATION
+;;
+;;   add to init.el
+;;
+;; NOTE:
+;;
+;; `eglot` allows you to separately run the server yourself, which can be useful
+;; for debugging. `lsp-mode` requires that it launches the process, and then
+;; your logs are buried in an emacs buffer somewhere.  If you want to run it
+;; yourself:
+;;
+;;     python lsp_server.py
+;;
+;; And then just make sure the `lsp_port` you run on is the same one mentioned
+;; at the bottom of this config.
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; LLM Mode
@@ -27,7 +44,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; LLM Mode (TODO REDUNDANT)
 
-(add-to-list 'load-path (expand-file-name "~/_/llmpal/"))
+(add-to-list 'load-path (expand-file-name "~/_/uniteai/"))
 
 (require 'llm-mode)
 

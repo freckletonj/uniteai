@@ -1,75 +1,83 @@
-# LLM Pal
+# uniteai
 
-Write alongside an AI, right in your editor, via an LSP tied to local/cloud AIs.
+Interact with AIs via the editor you already use, directly inside the document you're editing.
 
-A hackable implementation that lets you roll-your-own prompt-engineering/custom models/plug into other tools etc.
+A key goal is to make this code simple, robust, and contributor-friendly.
 
-It is tested with Emacs, but the LSP Server should work on most editors. More editors to come!
+Please consider adding to `./contrib`utions, make a PR against the main library, add a [`.todo/042_my_feature.md`](./todo), or make an [Issue](https://github.com/freckletonj/uniteai/issues) with your cool concept.
 
 
-## The Goods
+|                        | **AI** | **You** |
+|:-----------------------|--------|---------|
+| Knows what you want    |        | ✓       |
+| Doesn't hallucinate    |        | ✓       |
+| Knows a ton            | ✓      |         |
+| Thinks super fast      | ✓      |         |
+| Easy to automate tasks | ✓      |         |
+| Supported in `uniteai` | ✓      | ✓       |
 
-![llmpal screencast](./screencast.gif)
 
-Right now this is set up to work automatically on `.llm` files only, because Eglot cannot run multiple LSPs in parallel. So if you use a python LSP, this won't work in conjunction. This will be an easy fix eventually.
+## Screencast Demo
+
+![uniteai screencast](./screencast.gif)
+
+
+## Capabilities
+
+|                                                 |   |
+|:------------------------------------------------|---|
+| **Features**                                    |   |
+| local voice-to-text                             | ✓ |
+| local LLM (eg Falcon)                           | ✓ |
+| ChatGPT & GPT API                               | ✓ |
+| Works via standard LSP                          | ✓ |
+| Only enable features you want                   | ✓ |
+|                                                 |   |
+| **Future**                                      |   |
+| Document retrieval & Embedding Indexing         | _ |
+| Prompt engineering / Assistants                 | _ |
+| Write-ahead for tab-completion                  | _ |
+| Contextualized on your files, repo, email, etc. | _ |
+| Contextualized on multiple highlighted regions  | _ |
+|                                                 |   |
+| **Editors**                                     |   |
+| emacs                                           | ✓ |
+| vscode                                          | _ |
+| vim                                             | _ |
+| jetbrains                                       | _ |
+| atom                                            | _ |
+|                                                 |   |
+| **Meta**                                        |   |
+| `contrib` dir for community contributions       | ✓ |
+| well documented                                 | ✓ |
+| robust simple code                              | ✓ |
 
 
 ## Setup
 
-This currently supports Emacs (but I would love to add support for more editors).
+Setup code is crazy simple (see: [`doc/example_lsp_mode_config.el`](./doc/example_lsp_mode_config.el)), but I only use emacs (on ubuntu), and would love some help for the other environments.
 
-For emacs, I've only tried with `eglot` so far, since `lsp-mode` doesn't support a connection over TCP. The connection over TCP makes it more convenient for relaunching the server by hand during development.
 
-So, the steps to run:
+### Emacs
 
-### 1. Setup emacs's `init.el`
-
-Clone this repo and then link to it in your `init.el`. Update the `'load-path` to link to this repo.
-
-```lisp
-(use-package eglot
-  :ensure t
-  :hook
-  (eglot--managed-mode . company-mode)
-  :init
-  (setq eglot-confirm-server-initiated-edits nil)
-  :config
-  (define-key eglot-mode-map (kbd "M-'") 'eglot-code-actions))
-
-(add-to-list 'load-path (expand-file-name "/home/path/to/llmpal/"))
-
-(require 'llm-mode)
-
-(use-package llm-mode
-  :ensure nil
-  :mode ("\\.llm\\'" . llm-mode)
-  :hook (llm-mode . eglot-ensure))
-```
-
-Optional add some nice keybindings. See [`doc/example_eglot_config.el`](./doc/example_eglot_config.el):
+#### 1. Setup
 
 ```
-...
-(add-hook 'llm-mode-hook
-          (lambda ()
-            (define-key llm-mode-map (kbd "C-c l g") 'eglot-code-action-openai-gpt)
-            (define-key llm-mode-map (kbd "C-c l c") 'eglot-code-action-openai-chatgpt)
-            (define-key llm-mode-map (kbd "C-c l l") 'eglot-code-action-local-llm)
-            (define-key llm-mode-map (kbd "C-c C-c") 'eglot-code-action-local-llm)
-            (define-key llm-mode-map (kbd "C-c l s") 'eglot-code-action-stop-local-llm)
-            (eglot-ensure)))
-```
-
-
-### 2. Run the LSP Server
-
-```
+git clone git@github.com:freckletonj/uniteai
+cd uniteai/
 pip install -r requirements.txt
-
-python lsp_server.py
+sudo apt install portaudio19-dev  # if you want transcription
 ```
 
-### 3. Optional: Run the local LLM server
+
+#### 2. Setup emacs's `init.el`
+
+* `lsp-mode`: `lsp-mode` is recommended because it allows multipe LSPs to run in parallel in the same buffer (eg `uniteai` and your python LSP). See [`doc/example_lsp_mode_config.el`](./doc/example_lsp_mode_config.el).
+
+* `EGlot`: See [`doc/example_eglot_config.el`](./doc/example_eglot_config.el):
+
+
+#### 3. Optional: Run the local LLM server
 
 ```
 uvicorn llm_server:app --port 8000
@@ -79,11 +87,12 @@ This reads your `config.yml` (example is in the repo) to find a Transformers-com
 
 I imagine if you point at the dir of any Transformers-compatible model, this should work.
 
-### 4. Give it a go.
+
+#### 4. Give it a go.
 
 **Keycombos**
 
-If you followed this installation procedure exactly, here are your keycombos:
+Your client configuration determines this, so if you are using the example client config examples in `./doc`:
 
 | Keycombo | Effect                                           |
 |:---------|:-------------------------------------------------|
@@ -91,45 +100,57 @@ If you followed this installation procedure exactly, here are your keycombos:
 |          |                                                  |
 | C-c l g  | Send region to GPT, stream output to text buffer |
 | C-c l c  | Same, but ChatGPT                                |
+|          |                                                  |
 | C-c l l  | Same, but local (eg Falcon) model                |
 | C-c C-c  | Same as `C-c l l` but quicker to hit             |
+|          |                                                  |
+| C-c l v  | Start transcribing from microphone               |
 |          |                                                  |
 | C-c l s  | Whatevers streaming, stop it                     |
 
 
+### vscode
+
+Accepting contributions. See [`.doc/`](./doc) for examples in other editors, it's quite simple.
+
+
+### vim
+
+Accepting contributions. See [`.doc/`](./doc) for examples in other editors, it's quite simple.
+
+
+### jetbrains
+
+Accepting contributions. See [`.doc/`](./doc) for examples in other editors, it's quite simple.
+
+
+### atom
+
+Accepting contributions. See [`.doc/`](./doc) for examples in other editors, it's quite simple.
+
+
 ## Misc
-
-### Emacs: Eglot vs LSP-mode?
-
-Eglot is currently supported.
-
-|                     | LSP  | Eglot   |
-|:--------------------|:-----|:--------|
-| Multiple Servers    | yes  | no      |
-| Speed               | ok   | fast    |
-| Features            | many | minimal |
-| Debug Adapter Proto | yes  | no      |
-| Work over TCP       | no   | yes     |
-|                     |      |         |
-
-- Some users report LSP-mode is tougher to get working, and buggier.
-
-- I've started with `eglot` because of the TCP capacity. It's easier to test changes if I can restart a server by hand.
-
-
-### VSCode
-
-Someone please help write some example configuration!
-
 
 ### TODO
 
-- [ ] support VSCode and other editors
-- [ ] Add ability to work in any buffer with any LSP. Eglot can't handle multi LSPs, but LSP-mode should be able. The issue with LSP-mode is I don't think it supports working over TCP, so reloading the server in dev env is annoying.
-- [ ] How should we package this up more nicely?
+See [`./todo/README.md`](./todo/README.md).
+
+At a high level:
+
+- [ ] support other editors
+- [ ] add cool features
 
 
-### Falcon Issue:
+### Notes on Local LLMs
+
+The file [`./llm_server.py`](./llm_server.py) launches a TCP server in which the LLM weights are booted up. The `lsp_server` will make calls to this `llm_server`.
+
+The reason is that the `lsp_server` lifecycle is (generally*) managed by the text editor, and LLM features can be really slow to boot up. Especially if you're developing a feature, you do not want the LLM to keep being read into your GPU each time you restart the `lsp_server`.
+
+`*` you don't have to let the editor manage the `lsp_server`. For instance, `eglot` in emacs allows you to launch it yourself, and then the editor client can just bind to the port.
+
+
+### Falcon LLM Issue:
 
 If Falcon runs on multiple threads, its cache has an issue. You need a separate `modelling_RW.py` that makes sure it never tries to cache.
 https://github.com/h2oai/h2ogpt/pull/297

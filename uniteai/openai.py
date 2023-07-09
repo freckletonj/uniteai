@@ -21,9 +21,9 @@ from thespian.actors import Actor
 import argparse
 import logging
 
-from llmpal.edit import init_block, cleanup_block, BlockJob
-from llmpal.common import extract_range, find_block, mk_logger
-from llmpal.server import Server
+from uniteai.edit import init_block, cleanup_block, BlockJob
+from uniteai.common import extract_range, find_block, mk_logger
+from uniteai.server import Server
 
 
 ##################################################
@@ -257,7 +257,13 @@ def configure(config_yaml):
     parser.add_argument('--openai_chat_engine', default=config_yaml.get('openai_chat_engine', None))
     parser.add_argument('--openai_max_length', default=config_yaml.get('openai_max_length', None))
     parser.add_argument('--openai_api_key', default=config_yaml.get('openai_api_key', None))
-    return parser.parse_args()
+
+    # bc this is only concerned with openai params, do not error if extra params
+    # are sent via cli.
+    args, _ = parser.parse_known_args()
+    return args
+
+
 
 
 def initialize(config, server):

@@ -1,6 +1,8 @@
 '''
 
-An LSP server that connects to the LLM server for doing the brainy stuff.
+An LSP server that connects to the LLM server and APIs for doing the brainy
+stuff.
+
 
 USAGE:
     python lsp_server.py
@@ -10,8 +12,8 @@ USAGE:
 
 import sys
 import logging
-import llmpal.server as server
-import llmpal.config as config
+import uniteai.server as server
+import uniteai.config as config
 import importlib
 
 
@@ -59,5 +61,9 @@ if __name__ == '__main__':
     for module_name in args.modules:
         load_module(module_name, config_yaml, server)
 
-    print(f'Starting LSP on port: {args.lsp_port}')
-    server.start_tcp(host='localhost', port=args.lsp_port)
+    if args.tcp:
+        print(f'Starting LSP on port: {args.lsp_port}')
+        server.start_tcp(host='localhost', port=args.lsp_port)
+    elif args.stdio:
+        print(f'Starting on STDIO')
+        server.start_io()
