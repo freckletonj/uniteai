@@ -8,6 +8,8 @@ scipy==1.10.1
 transformers==4.30.0
 uvicorn==0.22.0
 
+Thespian
+
 # transcription
 soundfile
 SpeechRecognition
