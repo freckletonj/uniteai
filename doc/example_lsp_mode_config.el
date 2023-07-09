@@ -1,7 +1,11 @@
-;; ADD TO init.el
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; lsp-mode
+;; LSP-MODE CONFIGURATION
+;;
+;;     add to init.el
+;;
+;; `lsp-mode` excels over eglot in that you can run it in parallel alongside
+;; other LSPs.
+
 
 (use-package lsp-mode
   :ensure t
