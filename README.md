@@ -1,8 +1,8 @@
 # uniteai
 
-Interact with AIs via the editor you already use, directly inside the document you're editing.
+Interact with local/cloud AIs via the editor you already use, directly inside the document you're editing.
 
-A key goal is to make this code simple, robust, and contributor-friendly.
+This is driven from a python backend, and therefore highly extensible. A key goal is to make this code simple, robust, and contributor-friendly, and to expand it to solving everything that's worth solving via this type of interface.
 
 Please consider adding to `./contrib`utions, make a PR against the main library, add a [`.todo/042_my_feature.md`](./todo), or make an [Issue](https://github.com/freckletonj/uniteai/issues) with your cool concept.
 
@@ -17,9 +17,26 @@ Please consider adding to `./contrib`utions, make a PR against the main library,
 | Supported in `uniteai` | ✓      | ✓       |
 
 
+## The Vision
+
+For those of us who wish, our interface with technology will increasingly be augmented/mediated by AI.
+
+We'll **create** code/books/emails/content/work-outputs via collaborating with AI.
+
+We'll **manage** tasks/processes via help from AI.
+
+We'll **learn and explore** via collaborating with AI.
+
+We'll seek **entertainment** value from interacting with an AI.
+
+What does the ideal interface look like?
+
+This project seeks to answer that.
+
+
 ## Screencast Demo
 
-![uniteai screencast](./screencast.gif)
+![uniteai screencast](./screencast.webm)
 
 
 ## Capabilities

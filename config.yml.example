@@ -42,7 +42,7 @@ transcription_model_path: '/home/path/to/vosk-model-en-us-0.22-lgraph'
 
 # Whisper
 #
-# transcription_model: 'whisper'
+# transcription_model_type: 'whisper'
 # transcription_model_size: 'base'  # tiny, base, small, medium, large-v2
 # transcription_model_path: '/home/path/to/whisper-base'
 
