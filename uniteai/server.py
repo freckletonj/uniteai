@@ -28,10 +28,6 @@ class Server(LanguageServer):
         super().__init__(name, version)
         self.code_actions = []
 
-        # TODO: move
-        self.stop_transcription = Event()
-        self.is_transcription_running = Event()
-
         # A ThreadPool for tasks. By throwing long running tasks on here, LSP
         # endpoints can return immediately.
         self.executor = ThreadPoolExecutor(max_workers=3)
