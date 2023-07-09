@@ -29,7 +29,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; LLM Mode (TODO REDUNDANT)
 
-(add-to-list 'load-path (expand-file-name "~/_/llmpal/"))
+(add-to-list 'load-path (expand-file-name "~/_/uniteai/"))
 
 (require 'llm-mode)
 

@@ -21,9 +21,9 @@ from thespian.actors import Actor
 import argparse
 import logging
 
-from llmpal.edit import init_block, cleanup_block, BlockJob
-from llmpal.common import extract_range, find_block, mk_logger
-from llmpal.server import Server
+from uniteai.edit import init_block, cleanup_block, BlockJob
+from uniteai.common import extract_range, find_block, mk_logger
+from uniteai.server import Server
 
 
 ##################################################

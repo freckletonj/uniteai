@@ -6,7 +6,7 @@ is essentially just a string document that can be accessed threadsafely.
 
 '''
 
-from llmpal.edit import Edits
+from uniteai.edit import Edits
 import threading
 import re
 import time
@@ -19,10 +19,10 @@ import concurrent.futures
 
 
 
-# from llmpal.assistant import Assistant
+# from uniteai.assistant import Assistant
 # from typing import Union
 # import pytest
-# from llmpal.common import insert_text_at
+# from uniteai.common import insert_text_at
 
 # JOB_DELAY = 0.001
 

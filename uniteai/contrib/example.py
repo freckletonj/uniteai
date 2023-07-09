@@ -23,9 +23,9 @@ import argparse
 import logging
 import time
 
-from llmpal.edit import init_block, cleanup_block, BlockJob
-from llmpal.common import find_block, mk_logger
-from llmpal.server import Server
+from uniteai.edit import init_block, cleanup_block, BlockJob
+from uniteai.common import find_block, mk_logger
+from uniteai.server import Server
 
 
 START_TAG = ':START_EXAMPLE:'
@@ -193,7 +193,7 @@ def code_action_example(start_digit: int,
 ##################################################
 # Setup
 #
-# NOTE: In `config.yml`, just add `llmpal.example` under `modules`, and this
+# NOTE: In `config.yml`, just add `uniteai.example` under `modules`, and this
 #       will automatically get built into the server at runtime.
 #
 

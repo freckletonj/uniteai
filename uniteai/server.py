@@ -17,7 +17,7 @@ from pygls.protocol import default_converter
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from thespian.actors import ActorSystem
-import llmpal.edit as edit
+import uniteai.edit as edit
 
 
 ##################################################
@@ -72,7 +72,7 @@ def initialize():
     '''
     A Barebones pygls LSP Server.
     '''
-    server = Server("llmpal", "0.1.0")
+    server = Server("uniteai", "0.1.0")
 
     @server.feature('workspace/didChangeConfiguration')
     def workspace_did_change_configuration(ls: Server, *args):

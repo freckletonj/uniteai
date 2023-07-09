@@ -12,8 +12,8 @@ USAGE:
 
 import sys
 import logging
-import llmpal.server as server
-import llmpal.config as config
+import uniteai.server as server
+import uniteai.config as config
 import importlib
 
 

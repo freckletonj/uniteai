@@ -42,8 +42,8 @@ import re
 import itertools
 import argparse
 
-from llmpal.common import ThreadSafeCounter, mk_logger, find_block
-from llmpal.edit import BlockJob, cleanup_block, init_block
+from uniteai.common import ThreadSafeCounter, mk_logger, find_block
+from uniteai.edit import BlockJob, cleanup_block, init_block
 
 
 START_TAG = ':START_TRANSCRIPTION:'

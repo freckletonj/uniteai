@@ -7,3 +7,9 @@ pygls==1.0.2
 scipy==1.10.1
 transformers==4.30.0
 uvicorn==0.22.0
+
+# transcription
+soundfile
+SpeechRecognition
+openai-whisper
+PyAudio

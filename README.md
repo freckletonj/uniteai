@@ -1,16 +1,35 @@
-# LLM Pal
+# uniteai
 
-##################################################
-soundfile
-SpeechRecognition
-openai-whisper
-PyAudio
+Interact with an AI right in your text document.
 
-sudo apt install portaudio19-dev
-##################################################
+|                        | **AI** | **You** |
+|:-----------------------|--------|---------|
+| Knows what you want    |        | ✓       |
+| Doesn't hallucinate    |        | ✓       |
+| Knows a ton            | ✓      |         |
+| Thinks super fast      | ✓      |         |
+| Easy to automate tasks | ✓      |         |
+| Supported in `uniteai` | ✓      | ✓       |
 
 
-Write alongside an AI, right in your editor, via an LSP tied to local/cloud AIs.
+Features
+
+|                                           |   |
+|:------------------------------------------|---|
+| local voice-to-text                       |   |
+| local LLM                                 |   |
+| ChatGPT & GPT                             |   |
+|                                           |   |
+| **Editors**                               |   |
+| emacs                                     |   |
+| vscode                                    | _ |
+| vim                                       | _ |
+|                                           |   |
+| **Meta**                                  |   |
+| well documented                           |   |
+| robust simple code                        |   |
+| `contrib` dir for community contributions |   |
+|                                           |   |
 
 A hackable implementation that lets you roll-your-own prompt-engineering/custom models/plug into other tools etc.
 
@@ -19,7 +38,7 @@ It is tested with Emacs, but the LSP Server should work on most editors. More ed
 
 ## The Goods
 
-![llmpal screencast](./screencast.gif)
+![uniteai screencast](./screencast.gif)
 
 Right now this is set up to work automatically on `.llm` files only, because Eglot cannot run multiple LSPs in parallel. So if you use a python LSP, this won't work in conjunction. This will be an easy fix eventually.
 
@@ -28,47 +47,21 @@ Right now this is set up to work automatically on `.llm` files only, because Egl
 
 This currently supports Emacs (but I would love to add support for more editors).
 
-For emacs, I've only tried with `eglot` so far, since `lsp-mode` doesn't support a connection over TCP. The connection over TCP makes it more convenient for relaunching the server by hand during development.
-
 So, the steps to run:
+
+### 0. Setup
+
+```
+pip install -r requirements.txt
+sudo apt install portaudio19-dev
+```
+
 
 ### 1. Setup emacs's `init.el`
 
-Clone this repo and then link to it in your `init.el`. Update the `'load-path` to link to this repo.
+* `lsp-mode`: `lsp-mode` is recommended because it allows multipe LSPs to run in parallel in the same buffer (eg `uniteai` and your python LSP). See [`doc/example_lsp_mode_config.el`](./doc/example_lsp_mode_config.el).
 
-```lisp
-(use-package eglot
-  :ensure t
-  :hook
-  (eglot--managed-mode . company-mode)
-  :init
-  (setq eglot-confirm-server-initiated-edits nil)
-  :config
-  (define-key eglot-mode-map (kbd "M-'") 'eglot-code-actions))
-
-(add-to-list 'load-path (expand-file-name "/home/path/to/llmpal/"))
-
-(require 'llm-mode)
-
-(use-package llm-mode
-  :ensure nil
-  :mode ("\\.llm\\'" . llm-mode)
-  :hook (llm-mode . eglot-ensure))
-```
-
-Optional add some nice keybindings. See [`doc/example_eglot_config.el`](./doc/example_eglot_config.el):
-
-```
-...
-(add-hook 'llm-mode-hook
-          (lambda ()
-            (define-key llm-mode-map (kbd "C-c l g") 'eglot-code-action-openai-gpt)
-            (define-key llm-mode-map (kbd "C-c l c") 'eglot-code-action-openai-chatgpt)
-            (define-key llm-mode-map (kbd "C-c l l") 'eglot-code-action-local-llm)
-            (define-key llm-mode-map (kbd "C-c C-c") 'eglot-code-action-local-llm)
-            (define-key llm-mode-map (kbd "C-c l s") 'eglot-code-action-stop-local-llm)
-            (eglot-ensure)))
-```
+* `EGlot`: See [`doc/example_eglot_config.el`](./doc/example_eglot_config.el):
 
 
 ### 2. Run the LSP Server
@@ -78,6 +71,7 @@ pip install -r requirements.txt
 
 python lsp_server.py
 ```
+
 
 ### 3. Optional: Run the local LLM server
 
@@ -89,11 +83,12 @@ This reads your `config.yml` (example is in the repo) to find a Transformers-com
 
 I imagine if you point at the dir of any Transformers-compatible model, this should work.
 
+
 ### 4. Give it a go.
 
 **Keycombos**
 
-If you followed this installation procedure exactly, here are your keycombos:
+Your client configuration determines this, so if you are using the example client config examples in `./doc`:
 
 | Keycombo | Effect                                           |
 |:---------|:-------------------------------------------------|
@@ -108,29 +103,6 @@ If you followed this installation procedure exactly, here are your keycombos:
 
 
 ## Misc
-
-### Emacs: Eglot vs LSP-mode?
-
-Eglot is currently supported.
-
-|                     | LSP  | Eglot   |
-|:--------------------|:-----|:--------|
-| Multiple Servers    | yes  | no      |
-| Speed               | ok   | fast    |
-| Features            | many | minimal |
-| Debug Adapter Proto | yes  | no      |
-| Work over TCP       | no   | yes     |
-|                     |      |         |
-
-- Some users report LSP-mode is tougher to get working, and buggier.
-
-- I've started with `eglot` because of the TCP capacity. It's easier to test changes if I can restart a server by hand.
-
-
-### VSCode
-
-Someone please help write some example configuration!
-
 
 ### TODO
 

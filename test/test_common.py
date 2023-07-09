@@ -4,7 +4,7 @@ Testing common util functions
 
 '''
 
-from llmpal.common import insert_text_at, find_pattern_in_document
+from uniteai.common import insert_text_at, find_pattern_in_document
 import pytest
 
 
