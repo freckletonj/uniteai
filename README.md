@@ -1,5 +1,15 @@
 # LLM Pal
 
+##################################################
+soundfile
+SpeechRecognition
+openai-whisper
+PyAudio
+
+sudo apt install portaudio19-dev
+##################################################
+
+
 Write alongside an AI, right in your editor, via an LSP tied to local/cloud AIs.
 
 A hackable implementation that lets you roll-your-own prompt-engineering/custom models/plug into other tools etc.

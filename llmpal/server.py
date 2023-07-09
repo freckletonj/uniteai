@@ -113,10 +113,10 @@ def initialize():
 
 def code_action_stop(params: CodeActionParams):
     return CodeAction(
-                title='Stop Local LLM',
+                title='Stop Streaming Things',
                 kind=CodeActionKind.Refactor,
                 command=Command(
-                    title='Stop Streaming',
+                    title='Stop Streaming Things',
                     command='command.stop'
                 )
             )

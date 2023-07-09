@@ -60,10 +60,14 @@ log = mk_logger(NAME, logging.DEBUG)
 
 class SpeechRecognition:
     def __init__(self,
+                 model_type,
+
+                 # whisper
                  model_path,
                  model_size,
                  volume_threshold):
 
+        self.model_type = model_type
         self.model_path = model_path
         self.model_size = model_size
 
@@ -79,16 +83,36 @@ class SpeechRecognition:
         # can deprecate that thread.
         self.transcription_counter = ThreadSafeCounter()
 
+    def recognize(self, audio):
+        log.debug(f'MODEL_TYPE: {self.model_type}')
+        log.debug(f'AUDIO: {audio}')
+        if self.model_type == 'vosk':
+            return self.r.recognize_whisper(
+                audio,
+                load_options=dict(
+                    device='cuda:0',
+                    download_root=self.model_path
+                ), language='en')
+
+        if self.model_type == 'whisper':
+            return self.r.recognize_whisper(
+                audio,
+                model=self.model_size,
+                load_options=dict(
+                    device='cuda:0',
+                    download_root=self.model_path
+                ), language='english')
+
     def _warmup(self):
         ''' Warm up, intended for a separate thread. '''
         empty_audio = sr.AudioData(np.zeros(10), sample_rate=1, sample_width=1)
-        self.r.recognize_whisper(empty_audio,
-                                 model=self.model_size,
-                                 load_options=dict(
-                                     device='cuda:0',
-                                     download_root=self.model_path
-                                 ), language='english')
-        logging.info('Warmed up Whisper')
+        self.recognize(empty_audio)
+        logging.info('Warmed up transcription model')
+
+        logging.info('Adjusting thresholds for ambient noise')
+        with sr.Microphone() as source:
+            self.r.adjust_for_ambient_noise(source)
+
 
     def warmup(self):
         '''Load whisper model into memory.'''
@@ -135,12 +159,17 @@ class SpeechRecognition:
                 continue
 
             try:
-                x = self.r.recognize_whisper(audio,
-                                             model=self.model_size,
-                                             load_options=dict(
-                                                 device='cuda:0',
-                                                 download_root=self.model_path
-                                             ), language='english').strip()
+                x = self.recognize(audio)
+                if not x:
+                    continue
+
+                x = x.strip()
+                # x = self.r.recognize_whisper(audio,
+                #                              model=self.model_size,
+                #                              load_options=dict(
+                #                                  device='cuda:0',
+                #                                  download_root=self.model_path
+                #                              ), language='english').strip()
 
                 log.debug(f'TRANSCRIPTION: {x}')
                 if filter_out(x):
@@ -231,12 +260,25 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
         # Set Config
         elif command == 'set_config':
             config = msg.get('config')
-            self.model_path = config.transcription_model_path
-            self.model_size = config.transcription_model_size
+            self.model_type = config.transcription_model_type
             self.volume_threshold = config.transcription_volume_threshold
+            self.model_path = config.transcription_model_path
+
+            # Vosk
+            if self.model_type == 'vosk':
+                pass
+
+            # Whisper
+            if self.model_type == 'whisper':
+                self.model_size = config.transcription_model_size
+
 
         elif command == 'initialize':
+            log.debug(f'INIT TYPE: {self.model_type}')
             self.speech_recognition = SpeechRecognition(
+                self.model_type,
+
+                # whisper
                 self.model_path,
                 self.model_size,
                 self.volume_threshold
@@ -343,10 +385,17 @@ def code_action_transcribe(params: CodeActionParams):
 
 def configure(config_yaml):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--transcription_model_size', default=config_yaml.get('transcription_model_size', None))
+    parser.add_argument('--transcription_model_type', default=config_yaml.get('transcription_model_type', None))
     parser.add_argument('--transcription_model_path', default=config_yaml.get('transcription_model_path', None))
     parser.add_argument('--transcription_volume_threshold', default=config_yaml.get('transcription_volume_threshold', None))
-    return parser.parse_args()
+
+    # whisper
+    parser.add_argument('--transcription_model_size', default=config_yaml.get('transcription_model_size', None))
+
+    # bc this is only concerned with transcription params, do not error if extra
+    # params are sent via cli.
+    args, _ = parser.parse_known_args()
+    return args
 
 
 def initialize(config: argparse.Namespace, server):

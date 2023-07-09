@@ -50,18 +50,17 @@ class ExampleActor(Actor):
         doc = msg.get('doc')
         edits = msg.get('edits')
 
-        log.debug(
-            f'%%%%%%%%%%'
-            f'ACTOR RECV: {msg["command"]}'
-            f'ACTOR STATE:'
-            f'is_running: {self.is_running}'
-            f'locked: {self.should_stop.is_set()}'
-            f'future: {self.current_future}'
-            f''
-            f'EDITS STATE:'
-            f'job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread else "NOT STARTED"}'
-            f'%%%%%%%%%%'
-        )
+        log.debug(f'''
+%%%%%%%%%%
+ACTOR RECV: {msg["command"]}
+ACTOR STATE:
+is_running: {self.is_running}
+locked: {self.should_stop.is_set()}
+future: {self.current_future}
+
+EDITS STATE:
+job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread else "NOT STARTED"}
+%%%%%%%%%%''')
 
         ##########
         # Start
@@ -205,7 +204,11 @@ def configure(config_yaml):
     parser.add_argument('--delay', default=config_yaml.get('delay', None))
 
     # These get picked up as `config` in `initialize`
-    return parser.parse_args()
+
+    # bc this is only concerned with example params, do not error if extra
+    # params are sent via cli.
+    args, _ = parser.parse_known_args()
+    return args
 
 
 def initialize(config, server):
