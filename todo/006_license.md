@@ -6,4 +6,4 @@ Does anyone have particular thoughts on a license?
 
 - GPL?
 
-- Free license, but you all get to pay me royalties once you make >$1M? (see: Falcon LLM, pre-sensibility).
+- Free license, but you all get to pay me royalties once you make >$1M? (joke, this is how Falcon LLM started).

@@ -1,1 +1,0 @@
-# Add Transcription via Whisper

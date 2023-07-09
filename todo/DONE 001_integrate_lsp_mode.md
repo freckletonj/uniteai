@@ -1,4 +1,4 @@
-# 001 Integrate `lsp-mode`
+# 001 Integrate `lsp-mode` :DONE:
 
 This will allow multiple LSPs to operate on the same buffer (eg LLM mode + Python mode)
 
