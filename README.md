@@ -199,3 +199,9 @@ def cos_sin(
 A separate bitsandbytes issue remains unresolved, but is less serious than the above.
 https://github.com/h2oai/h2ogpt/issues/104
 https://github.com/TimDettmers/bitsandbytes/issues/162
+
+# License
+
+Copyright (c) Josh Freckleton. All rights reserved.
+
+Licensed under the [Apache-2.0](https://apache.org/licenses/LICENSE-2.0) license.
