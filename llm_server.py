@@ -52,7 +52,7 @@ import logging
 ##################################################
 # Initialization
 
-with open("config.yml", 'r') as file:
+with open(".uniteai.yml", 'r') as file:
     config = yaml.safe_load(file)
     model_path = config['model_path']
     model_commit = config['model_commit']  # doesn't work yet in `transformers`

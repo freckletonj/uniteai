@@ -193,7 +193,7 @@ def code_action_example(start_digit: int,
 ##################################################
 # Setup
 #
-# NOTE: In `config.yml`, just add `uniteai.example` under `modules`, and this
+# NOTE: In `.uniteai.yml`, just add `uniteai.example` under `modules`, and this
 #       will automatically get built into the server at runtime.
 #
 

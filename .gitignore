@@ -3,7 +3,7 @@
 __pycache__/
 
 # Config
-config.yml
+.uniteai.yml
 
 # Misc
 test.llm

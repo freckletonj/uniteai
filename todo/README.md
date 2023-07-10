@@ -23,7 +23,7 @@ This section of the repo gets to be quite unstructured, so, sling some of your t
 Here's a feature that will start counting up inside your document, and just demonstrates how to build a new feature.
 
 
-##### [`./config.yml`](./config.yml)
+##### [`./.uniteai.yml`](./.uniteai.yml)
 
 You specify what features should be included by adding their module path. For instance the following only allows the `example` feature:
 
@@ -35,7 +35,7 @@ modules:
   - uniteai.contrib.example
 ```
 
-The one central `config.yml` holds all config that may apply to any feature.
+The one central `.uniteai.yml` holds all config that may apply to any feature.
 
 ```yaml
 # Example: `uniteai.contrib.example`

@@ -27,8 +27,8 @@ def get_args():
     configuration, which will be gathered in a second round of config parsing.
     '''
     # Load config file
-    config_yaml = load_config(['config.yaml',
-                               'config.yml'])
+    config_yaml = load_config(['.uniteai.yaml',
+                               '.uniteai.yml'])
 
     # Parse command-line arguments
     parser = argparse.ArgumentParser()

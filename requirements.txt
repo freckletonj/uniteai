@@ -1,17 +1,24 @@
+# LSP Server
+pygls==1.0.2
+Thespian
+
+
+# Local LLM
 accelerate==0.20.3
 bitsandbytes==0.39.0
 einops==0.6.1
 fastapi==0.96.0
-openai==0.27.8
-pygls==1.0.2
 scipy==1.10.1
 transformers==4.30.0
 uvicorn==0.22.0
 
-Thespian
+
+# openai
+openai==0.27.8
+
 
 # transcription
-soundfile
+PyAudio
 SpeechRecognition
 openai-whisper
-PyAudio
+soundfile

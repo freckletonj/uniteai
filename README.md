@@ -99,7 +99,7 @@ sudo apt install portaudio19-dev  # if you want transcription
 uvicorn llm_server:app --port 8000
 ```
 
-This reads your `config.yml` (example is in the repo) to find a Transformers-compatible model, eg Falcon, and will run it.
+This reads your `.uniteai.yml` configuration  (example is in the repo) to find a Transformers-compatible model, eg Falcon, and will run it.
 
 I imagine if you point at the dir of any Transformers-compatible model, this should work.
 
