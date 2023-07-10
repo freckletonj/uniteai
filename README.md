@@ -36,8 +36,9 @@ This project seeks to answer that.
 
 ## Screencast Demo
 
-https://raw.githubusercontent.com/freckletonj/uniteai/c2321cc119bb48564b536cfcfed0ea81bb2a11e0/screencast.mp4
-
+![1](./screencast.mp4)
+![2](https://raw.githubusercontent.com/freckletonj/uniteai/c2321cc119bb48564b536cfcfed0ea81bb2a11e0/screencast.mp4)
+![3](./screencast.webm)
 
 ## Capabilities
 
