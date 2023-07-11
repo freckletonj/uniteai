@@ -28,7 +28,7 @@ from uniteai.server import Server
 START_TAG = ':START_LOCAL:'
 END_TAG = ':END_LOCAL:'
 NAME = 'local_llm'
-log = mk_logger(NAME, logging.WARN)
+log = mk_logger(NAME, logging.DEBUG)
 
 
 class LocalLLMActor(Actor):
@@ -169,6 +169,19 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
                 start_tag=START_TAG,
                 end_tag=END_TAG,
                 text=f'\n{running_text}\n',
+                strict=True,
+            )
+            edits.add_job(NAME, job)
+
+        except requests.exceptions.ConnectionError as e:
+            # LLM Server isn't started
+            msg = f'\nERROR, first start the local LLM Server as a separate process: `uniteai_llm`.\n\nERROR MSG: {e}'
+            log.error(msg)
+            job = BlockJob(
+                uri=uri,
+                start_tag=START_TAG,
+                end_tag=END_TAG,
+                text=msg,
                 strict=True,
             )
             edits.add_job(NAME, job)

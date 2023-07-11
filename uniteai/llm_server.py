@@ -2,6 +2,7 @@
 
 Launch an LLM locally, and serve it.
 
+
 ----------
 RUN:
     uvicorn llm_server:app --port 8000
@@ -50,7 +51,9 @@ import yaml
 import multiprocessing as mp
 import logging
 from uniteai.common import get_nested
+from uniteai.config import load_config
 import uvicorn
+
 
 ##################################################
 # `transformers`
@@ -64,17 +67,24 @@ def load_model(args):
         model = T5ForConditionalGeneration.from_pretrained(name_or_path, device_map='auto')
         return tokenizer, model
 
+    # AutoModelForCausalLM (should support many models)
     else:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_path,
+            name_or_path,
         )
+        revision = {'revision':args['model_commit']} if 'model_commit' in args else {}
+        device_map = {'device_map':args['device_map']} if 'device_map' in args else {}
+        load_in_8bit = {'load_in_8bit':args['load_in_8bit']} if 'load_in_8bit' in args else {}
+        load_in_4bit = {'load_in_4bit':args['load_in_4bit']} if 'load_in_4bit' in args else {}
+        trust_remote_code = {'trust_remote_code':args['trust_remote_code']} if 'trust_remote_code' in args else {}
+
         model = AutoModelForCausalLM.from_pretrained(
-            pretrained_model_name_or_path=model_path,
-            torch_dtype=torch.float16,
-            trust_remote_code=True,
-            # revision=model_commit,
-            device_map="auto",
-            load_in_8bit=True,
+            pretrained_model_name_or_path=name_or_path,
+            **trust_remote_code,  # needed by eg Falcon, and MosaicML
+            **revision,
+            **device_map,
+            **load_in_8bit,
+            **load_in_4bit,
         )
         return tokenizer, model
 
@@ -82,9 +92,8 @@ def load_model(args):
 ##################################################
 # Initialization
 
-with open(".uniteai.yml", 'r') as file:
-    config = yaml.safe_load(file)
-    args = config['local_llm']
+config = load_config()
+args = config['local_llm']
 
 
 ##################################################
@@ -203,7 +212,7 @@ def local_llm_stream_stop():
 
 
 def main():
-    uvicorn.run("llm_server:app",
+    uvicorn.run("uniteai.llm_server:app",
                 host=get_nested(config, ['local_llm', 'host']),
                 port=get_nested(config, ['local_llm', 'port']))
 

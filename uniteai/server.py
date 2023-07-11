@@ -103,6 +103,8 @@ def initialize():
         for actor in ls.actors:
             ls.tell_actor(actor, actor_args)
 
+    # Add `command.stop` as a "Code Action" too (accessible from the dropdown
+    # menu, eg `M-'`.
     server.add_code_action(code_action_stop)
     return server
 

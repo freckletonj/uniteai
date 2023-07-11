@@ -52,7 +52,7 @@ NAME = 'transcription'
 
 # A custom logger for just this feature. You can tune the log level to turn
 # on/off just this feature's logs.
-log = mk_logger(NAME, logging.DEBUG)
+log = mk_logger(NAME, logging.WARN)
 
 
 ##################################################

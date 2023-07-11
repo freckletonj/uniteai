@@ -1,9 +1,11 @@
 # Python
 .env/
 __pycache__/
+dist/
 
 # Config
 .uniteai.yml
+.uniteai.yaml
 
 # Misc
 test.md

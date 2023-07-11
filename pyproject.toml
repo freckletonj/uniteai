@@ -1,0 +1,79 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "uniteai"
+version = "0.1.8"
+description = "AI, Inside your Editor."
+readme = "README.md"
+license = "Apache-2.0"
+authors = [{ name = "Josh Freckleton"}]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent"
+]
+requires-python = ">=3.7"
+
+dependencies = [
+  "pygls",
+  "Thespian",
+  "PyYAML",
+  "requests",
+]
+
+[project.optional-dependencies]
+local_llm = [
+  "accelerate",
+  "bitsandbytes",
+  "einops",
+  "fastapi",
+  "scipy",
+  "transformers",
+  "uvicorn",
+  "sentencepiece",
+]
+openai = ["openai"]
+transcription = [
+  "PyAudio",
+  "SpeechRecognition",
+  "openai-whisper",
+  "soundfile",
+]
+all = [
+  "accelerate",
+  "bitsandbytes",
+  "einops",
+  "fastapi",
+  "scipy",
+  "transformers",
+  "uvicorn",
+  "sentencepiece",
+
+  "openai",
+
+  "PyAudio",
+  "SpeechRecognition",
+  "openai-whisper",
+  "soundfile",
+]
+
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/uniteai",
+]
+
+[tool.hatch.build.targets.wheel.force-include]
+"config.yml.example" = "config.yml.example"
+
+[project.scripts]
+uniteai_lsp = "uniteai.lsp_server:main"
+uniteai_llm = "uniteai.llm_server:main"
+
+[project.urls]
+"Homepage" = "https://github.com/freckletonj/uniteai"
+"Bug Tracker" = "https://github.com/freckletonj/uniteai/issues"
+
+[tool.pip]
+extra-index-url = "..."

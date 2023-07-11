@@ -1,9 +1,6 @@
 test_lsp:
 	./test_lsp.sh
 
-llm_server:
-	uvicorn llm_server:app --port 8000
-
 .PHONY: watch-tests
 watch-tests:
 	# from inotify-tools
@@ -11,3 +8,8 @@ watch-tests:
 		do \
 			pytest --capture=no; \
 		done
+
+upload:
+	rm -r dist
+	python -m build
+	python -m twine upload dist/*
