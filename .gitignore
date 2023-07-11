@@ -1,9 +1,12 @@
 # Python
 .env/
 __pycache__/
+dist/
+uniteai.egg-info/
 
 # Config
-config.yml
+.uniteai.yml
+.uniteai.yaml
 
 # Misc
-test.llm
+test.md

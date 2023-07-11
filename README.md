@@ -99,7 +99,7 @@ sudo apt install portaudio19-dev  # if you want transcription
 uvicorn llm_server:app --port 8000
 ```
 
-This reads your `config.yml` (example is in the repo) to find a Transformers-compatible model, eg Falcon, and will run it.
+This reads your `.uniteai.yml` configuration  (example is in the repo) to find a Transformers-compatible model, eg Falcon, and will run it.
 
 I imagine if you point at the dir of any Transformers-compatible model, this should work.
 
@@ -118,7 +118,6 @@ Your client configuration determines this, so if you are using the example clien
 | C-c l c  | Same, but ChatGPT                                |
 |          |                                                  |
 | C-c l l  | Same, but local (eg Falcon) model                |
-| C-c C-c  | Same as `C-c l l` but quicker to hit             |
 |          |                                                  |
 | C-c l v  | Start transcribing from microphone               |
 |          |                                                  |

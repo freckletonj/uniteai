@@ -21,14 +21,14 @@ import logging
 import argparse
 
 from uniteai.edit import init_block, cleanup_block, BlockJob
-from uniteai.common import extract_range, find_block, mk_logger
+from uniteai.common import extract_range, find_block, mk_logger, get_nested
 from uniteai.server import Server
 
 
 START_TAG = ':START_LOCAL:'
 END_TAG = ':END_LOCAL:'
 NAME = 'local_llm'
-log = mk_logger(NAME, logging.WARN)
+log = mk_logger(NAME, logging.DEBUG)
 
 
 class LocalLLMActor(Actor):
@@ -83,12 +83,11 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
         ##########
         # Config
         elif command == 'set_config':
-            self.model_path = msg.get('model_path')
-            self.model_commit = msg.get('model_commit')
-            self.local_max_length = msg.get('local_max_length')
-            self.top_k = msg.get('top_k')
-            self.llm_port = msg.get('llm_port')
-            self.llm_uri = msg.get('llm_uri')
+            self.max_length = msg.get('local_llm_max_length')
+            self.top_k = msg.get('local_llm_top_k')
+            self.port = msg.get('local_llm_port')
+            self.host = msg.get('local_llm_host')
+            self.llm_uri = f'http://{self.host}:{self.port}'
 
     def start(self, uri, range, prompt, edits):
         if self.is_running:
@@ -121,7 +120,7 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
         try:
             request_data = {
                 "text": prompt,
-                "max_length": self.local_max_length,
+                "max_length": self.max_length,
                 "do_sample": True,
                 "top_k": self.top_k,
                 "num_return_sequences": 1
@@ -174,6 +173,19 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
             )
             edits.add_job(NAME, job)
 
+        except requests.exceptions.ConnectionError as e:
+            # LLM Server isn't started
+            msg = f'\nERROR, first start the local LLM Server as a separate process: `uniteai_llm`.\n\nERROR MSG: {e}'
+            log.error(msg)
+            job = BlockJob(
+                uri=uri,
+                start_tag=START_TAG,
+                end_tag=END_TAG,
+                text=msg,
+                strict=True,
+            )
+            edits.add_job(NAME, job)
+
         except Exception as e:
             log.error(f'Error: Local LLM, {e}')
 
@@ -206,12 +218,12 @@ def code_action_local_llm(params: CodeActionParams):
 def configure(config_yaml):
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model_path', default=config_yaml.get('model_path', None))
-    parser.add_argument('--model_commit', default=config_yaml.get('model_commit', None))
-    parser.add_argument('--local_max_length', default=config_yaml.get('local_max_length', None))
-    parser.add_argument('--top_k', default=config_yaml.get('top_k', None))
-    parser.add_argument('--llm_port', default=config_yaml.get('llm_port', None))
-    parser.add_argument('--llm_uri', default=config_yaml.get('llm_uri', None))
+    parser.add_argument('--local_llm_model_path', default=get_nested(config_yaml, ['local_llm', 'model_path']))
+    parser.add_argument('--local_llm_model_commit', default=get_nested(config_yaml, ['local_llm', 'model_commit']))
+    parser.add_argument('--local_llm_max_length', default=get_nested(config_yaml, ['local_llm', 'max_length']))
+    parser.add_argument('--local_llm_top_k', default=get_nested(config_yaml, ['local_llm', 'top_k']))
+    parser.add_argument('--local_llm_port', default=get_nested(config_yaml, ['local_llm', 'port']))
+    parser.add_argument('--local_llm_host', default=get_nested(config_yaml, ['local_llm', 'host']))
 
     # bc this is only concerned with local llm params, do not error if extra
     # params are sent via cli.

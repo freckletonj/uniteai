@@ -22,7 +22,7 @@ import argparse
 import logging
 
 from uniteai.edit import init_block, cleanup_block, BlockJob
-from uniteai.common import extract_range, find_block, mk_logger
+from uniteai.common import extract_range, find_block, mk_logger, get_nested
 from uniteai.server import Server
 
 
@@ -173,7 +173,7 @@ def openai_autocomplete(engine, text, max_length):
                 yield generated_text
 
 def openai_stream_fn(uri, prompt, engine, max_length, stop_event, edits):
-    log.debug('START: OPENAI_STREAM_FN')
+    log.debug(f'START: OPENAI_STREAM_FN, max_length={max_length}')
     try:
         # Stream the results to LSP Client
         running_text = ''
@@ -209,7 +209,7 @@ def openai_stream_fn(uri, prompt, engine, max_length, stop_event, edits):
             strict=True,
         )
         edits.add_job(NAME, job)
-
+        log.debug('STREAM COMPLETE')
     except Exception as e:
         log.error(f'Error: OpenAI, {e}')
 
@@ -253,10 +253,10 @@ def code_action_chat_gpt(engine, max_length, params: CodeActionParams):
 
 def configure(config_yaml):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--openai_completion_engine', default=config_yaml.get('openai_completion_engine', None))
-    parser.add_argument('--openai_chat_engine', default=config_yaml.get('openai_chat_engine', None))
-    parser.add_argument('--openai_max_length', default=config_yaml.get('openai_max_length', None))
-    parser.add_argument('--openai_api_key', default=config_yaml.get('openai_api_key', None))
+    parser.add_argument('--openai_completion_engine', default=get_nested(config_yaml, ['openai', 'completion_engine']))
+    parser.add_argument('--openai_chat_engine', default=get_nested(config_yaml, ['openai', 'chat_engine']))
+    parser.add_argument('--openai_max_length', default=get_nested(config_yaml, ['openai', 'max_length']))
+    parser.add_argument('--openai_api_key', default=get_nested(config_yaml, ['openai', 'api_key']))
 
     # bc this is only concerned with openai params, do not error if extra params
     # are sent via cli.

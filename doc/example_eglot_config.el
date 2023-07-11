@@ -129,10 +129,13 @@
 (add-hook 'llm-mode-hook
           (lambda ()
             (define-key llm-mode-map (kbd "C-c l s") 'eglot-stop)
+
             (define-key llm-mode-map (kbd "C-c l e") 'eglot-example-counter)
+
             (define-key llm-mode-map (kbd "C-c l l") 'eglot-local-llm)
-            (define-key llm-mode-map (kbd "C-c C-c") 'eglot-local-llm)
+
             (define-key llm-mode-map (kbd "C-c l v") 'eglot-transcribe)
+
             (define-key llm-mode-map (kbd "C-c l g") 'eglot-openai-gpt)
             (define-key llm-mode-map (kbd "C-c l c") 'eglot-openai-chatgpt)
             (eglot-ensure)))

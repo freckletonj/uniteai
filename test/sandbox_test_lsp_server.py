@@ -1,4 +1,4 @@
-from lsp_server import extract_range
+from uniteai.lsp_server import extract_range
 from lsprotocol.types import (
     Position,
     Range,

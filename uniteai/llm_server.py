@@ -2,6 +2,7 @@
 
 Launch an LLM locally, and serve it.
 
+
 ----------
 RUN:
     uvicorn llm_server:app --port 8000
@@ -38,7 +39,9 @@ from pydantic import BaseModel
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
-    TextIteratorStreamer
+    TextIteratorStreamer,
+    T5Tokenizer,
+    T5ForConditionalGeneration,
 )
 from transformers.generation import StoppingCriteriaList
 from typing import List
@@ -47,15 +50,50 @@ import torch
 import yaml
 import multiprocessing as mp
 import logging
+from uniteai.common import get_nested
+from uniteai.config import load_config
+import uvicorn
+
+
+##################################################
+# `transformers`
+
+def load_model(args):
+    name_or_path = args['model_name_or_path']
+
+    # T5
+    if 't5' in name_or_path:
+        tokenizer = T5Tokenizer.from_pretrained(name_or_path)
+        model = T5ForConditionalGeneration.from_pretrained(name_or_path, device_map='auto')
+        return tokenizer, model
+
+    # AutoModelForCausalLM (should support many models)
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(
+            name_or_path,
+        )
+        revision = {'revision':args['model_commit']} if 'model_commit' in args else {}
+        device_map = {'device_map':args['device_map']} if 'device_map' in args else {}
+        load_in_8bit = {'load_in_8bit':args['load_in_8bit']} if 'load_in_8bit' in args else {}
+        load_in_4bit = {'load_in_4bit':args['load_in_4bit']} if 'load_in_4bit' in args else {}
+        trust_remote_code = {'trust_remote_code':args['trust_remote_code']} if 'trust_remote_code' in args else {}
+
+        model = AutoModelForCausalLM.from_pretrained(
+            pretrained_model_name_or_path=name_or_path,
+            **trust_remote_code,  # needed by eg Falcon, and MosaicML
+            **revision,
+            **device_map,
+            **load_in_8bit,
+            **load_in_4bit,
+        )
+        return tokenizer, model
 
 
 ##################################################
 # Initialization
 
-with open("config.yml", 'r') as file:
-    config = yaml.safe_load(file)
-    model_path = config['model_path']
-    model_commit = config['model_commit']  # doesn't work yet in `transformers`
+config = load_config()
+args = config['local_llm']
 
 
 ##################################################
@@ -77,20 +115,9 @@ app = FastAPI()
 
 
 @app.on_event("startup")
-def load_model():
+def initialize_model():
     global tokenizer, model
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_path,
-    )
-    model = AutoModelForCausalLM.from_pretrained(
-        pretrained_model_name_or_path=model_path,
-        torch_dtype=torch.float16,
-        trust_remote_code=True,
-        revision='DOESNT ACTUALLY WORK',
-        device_map="auto",
-        load_in_8bit=True,
-    )
-
+    tokenizer, model = load_model(args)
 
 ##################################################
 # Local LLM
@@ -182,3 +209,12 @@ def local_llm_stream_stop():
     global local_llm_stop_event
     local_llm_stop_event.set()
     return Response(status_code=200)
+
+
+def main():
+    uvicorn.run("uniteai.llm_server:app",
+                host=get_nested(config, ['local_llm', 'host']),
+                port=get_nested(config, ['local_llm', 'port']))
+
+if __name__ == "__main__":
+    main()

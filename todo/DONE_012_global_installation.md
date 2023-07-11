@@ -9,3 +9,9 @@ cd uniteai
 source .env/bin/activate
 emacs
 ```
+
+# FINISHED
+
+```
+pip install uniteai[all]
+```

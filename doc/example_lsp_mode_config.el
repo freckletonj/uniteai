@@ -92,10 +92,13 @@
   :lighter " LLM"
   :keymap (let ((map (make-sparse-keymap)))
             (define-key map (kbd "C-c l s") 'lsp-stop)
+
             (define-key map (kbd "C-c l e") 'lsp-example-counter)
+
             (define-key map (kbd "C-c l l") 'lsp-local-llm)
-            (define-key map (kbd "C-c C-c") 'lsp-local-llm)
+
             (define-key map (kbd "C-c l v") 'lsp-transcribe)
+
             (define-key map (kbd "C-c l g") 'lsp-openai-gpt)
             (define-key map (kbd "C-c l c") 'lsp-openai-chatgpt)
             map))
@@ -104,7 +107,7 @@
 (setq lsp-log-io t)
 
 (lsp-register-client
- (make-lsp-client :new-connection (lsp-stdio-connection "python lsp_server.py --stdio")
+ (make-lsp-client :new-connection (lsp-stdio-connection "uniteai_lsp --stdio")
                   :major-modes '(python-mode markdown-mode org-mode)
                   :server-id 'llm-lsp
                   :priority -2
@@ -114,7 +117,7 @@
 (lsp-register-client
  (make-lsp-client :new-connection (lsp-tcp-connection
                                    (lambda (port)
-                                     `("python" "lsp_server.py" "--tcp" "--lsp_port" ,(number-to-string port))))
+                                     `("uniteai_lsp" "--tcp" "--lsp_port" ,(number-to-string port))))
                   :priority -3
                   :major-modes '(python-mode markdown-mode org-mode)
                   :server-id 'llm-lsp-tcp

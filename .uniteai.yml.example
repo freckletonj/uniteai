@@ -1,0 +1,63 @@
+##########
+# LSP
+
+lsp_port: 5033  # editor connects to LSP via this port
+modules:
+  - uniteai.local_llm
+  - uniteai.transcription
+  - uniteai.openai
+  - uniteai.contrib.example
+
+
+##########
+# Example: `uniteai.contrib.example`
+#
+# a feature that counts up
+
+example:
+  start_digit: 13
+  end_digit: 1000
+  delay: 0.4
+
+
+##########
+# Local LLM: `uniteai.local_llm`
+
+local_llm:
+  port: 8000  # LSP connects to LLM server via this port
+  host: 'localhost'
+  # model_name_or_path: '/home/me/path/to/falcon-7b-instruct/'
+  # model_name_or_path: 't5-base'
+  model_name_or_path: 'google/flan-t5-large'
+  model_commit: 'Unfortunately, Transformers doesnt actually dbl check this (at least for Falcon), but should.'
+
+  # Falcon params
+  max_length: 1000
+  top_k: 10
+
+
+##########
+# Transcription: `uniteai.transcription`
+
+transcription:
+  volume_threshold: 100  # see `speech_recognition` docs for energy threshold
+
+  # # Vosk
+  # #
+  # # Download from: https://alphacephei.com/vosk/models
+  # model_type: 'vosk'
+  # model_path: '/home/me/path/to/vosk-model-en-us-0.22-lgraph'
+
+  # Whisper
+  model_type: 'whisper'
+  model_size: 'base'  # tiny, base, small, medium, large-v2
+  model_path: '/home/me/path/to/whisper-base'
+
+
+##########
+# OpenAI
+openai:
+  api_key: "sk-..."
+  completion_engine: 'text-davinci-002'
+  chat_engine: 'gpt-3.5-turbo'
+  max_length: 1000
