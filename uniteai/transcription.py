@@ -42,7 +42,7 @@ import re
 import itertools
 import argparse
 
-from uniteai.common import ThreadSafeCounter, mk_logger, find_block
+from uniteai.common import ThreadSafeCounter, mk_logger, find_block, get_nested
 from uniteai.edit import BlockJob, cleanup_block, init_block
 
 
@@ -385,12 +385,12 @@ def code_action_transcribe(params: CodeActionParams):
 
 def configure(config_yaml):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--transcription_model_type', default=config_yaml.get('transcription_model_type', None))
-    parser.add_argument('--transcription_model_path', default=config_yaml.get('transcription_model_path', None))
-    parser.add_argument('--transcription_volume_threshold', default=config_yaml.get('transcription_volume_threshold', None))
+    parser.add_argument('--transcription_model_type', default=get_nested(config_yaml, ['transcription', 'model_type']))
+    parser.add_argument('--transcription_model_path', default=get_nested(config_yaml, ['transcription', 'model_path']))
+    parser.add_argument('--transcription_volume_threshold', default=get_nested(config_yaml, ['transcription', 'volume_threshold']))
 
     # whisper
-    parser.add_argument('--transcription_model_size', default=config_yaml.get('transcription_model_size', None))
+    parser.add_argument('--transcription_model_size', default=get_nested(config_yaml, ['transcription', 'model_size']))
 
     # bc this is only concerned with transcription params, do not error if extra
     # params are sent via cli.

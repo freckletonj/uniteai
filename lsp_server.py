@@ -12,7 +12,7 @@ USAGE:
 
 import sys
 import logging
-import uniteai.server as server
+import uniteai.server
 import uniteai.config as config
 import importlib
 
@@ -53,10 +53,11 @@ def load_module(module_name, config_yaml, server):
         module.initialize(args, server)
 
 
-if __name__ == '__main__':
-    # First pass at configuration
+def main():
+    # First pass at configuration. Further passes will pick up config
+    # per-feature.
     args, config_yaml, parser = config.get_args()
-    server = server.initialize()
+    server = uniteai.server.initialize()
 
     for module_name in args.modules:
         load_module(module_name, config_yaml, server)
@@ -67,3 +68,7 @@ if __name__ == '__main__':
     elif args.stdio:
         print(f'Starting on STDIO')
         server.start_io()
+
+
+if __name__ == '__main__':
+    main()

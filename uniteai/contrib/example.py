@@ -24,7 +24,7 @@ import logging
 import time
 
 from uniteai.edit import init_block, cleanup_block, BlockJob
-from uniteai.common import find_block, mk_logger
+from uniteai.common import find_block, mk_logger, get_nested
 from uniteai.server import Server
 
 
@@ -199,9 +199,9 @@ def code_action_example(start_digit: int,
 
 def configure(config_yaml):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--start_digit', default=config_yaml.get('start_digit', None))
-    parser.add_argument('--end_digit', default=config_yaml.get('end_digit', None))
-    parser.add_argument('--delay', default=config_yaml.get('delay', None))
+    parser.add_argument('--example_start_digit', default=get_nested(config_yaml, ['example', 'start_digit']))
+    parser.add_argument('--example_end_digit', default=get_nested(config_yaml, ['example', 'end_digit']))
+    parser.add_argument('--example_delay', default=get_nested(config_yaml, ['example', 'delay']))
 
     # These get picked up as `config` in `initialize`
 
@@ -213,9 +213,9 @@ def configure(config_yaml):
 
 def initialize(config, server):
     # Config
-    start_digit = config.start_digit
-    end_digit = config.end_digit
-    delay = config.delay
+    start_digit = config.example_start_digit
+    end_digit = config.example_end_digit
+    delay = config.example_delay
 
     # Actor
     server.add_actor(NAME, ExampleActor)

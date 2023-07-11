@@ -64,6 +64,20 @@ class ThreadSafeCounter:
 
 
 ##################################################
+# Dict helpers
+
+def get_nested(config, keys):
+    ''' Ex: get_nested(my_dict, ['some', 'nested', 'key'] '''
+    temp = config
+    for k in keys:
+        if k in temp:
+            temp = temp[k]
+        else:
+            return None
+    return temp
+
+
+##################################################
 # String helpers
 
 def insert_text_at(document, insert_text, line_no, col_no):

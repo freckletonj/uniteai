@@ -118,7 +118,6 @@ Your client configuration determines this, so if you are using the example clien
 | C-c l c  | Same, but ChatGPT                                |
 |          |                                                  |
 | C-c l l  | Same, but local (eg Falcon) model                |
-| C-c C-c  | Same as `C-c l l` but quicker to hit             |
 |          |                                                  |
 | C-c l v  | Start transcribing from microphone               |
 |          |                                                  |
