@@ -2,6 +2,7 @@
 .env/
 __pycache__/
 dist/
+uniteai.egg-info/
 
 # Config
 .uniteai.yml
