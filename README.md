@@ -14,45 +14,45 @@
 **Editor:** VSCode(ium) or Emacs or any editor with LSP capabilities (most).
 
 
-# uniteai
+## Screencast Demo
 
-Interact with local/cloud AIs via the editor you already use, directly inside the document you're editing.
-
-This is driven from a python backend, and therefore highly extensible. A key goal is to make this code simple, robust, and contributor-friendly, and to expand it to solving everything that's worth solving via this type of interface.
-
-Please consider adding to `./contrib`utions, make a PR against the main library, add a [`.todo/042_my_feature.md`](./todo), or make an [Issue](https://github.com/freckletonj/uniteai/issues) with your cool concept.
-
-
-|                        | **AI** | **You** |
-|:-----------------------|--------|---------|
-| Knows what you want    |        | ✓       |
-| Doesn't hallucinate    |        | ✓       |
-| Knows a ton            | ✓      |         |
-| Thinks super fast      | ✓      |         |
-| Easy to automate tasks | ✓      |         |
-| Supported in `uniteai` | ✓      | ✓       |
+[screencast.webm](https://github.com/freckletonj/uniteai/assets/8399149/77a5293a-6f49-4cc5-9d6e-3f3e11f97925)
 
 
 ## The Vision
 
-For those of us who wish, our interface with technology will increasingly be augmented/mediated by AI.
+### AIs, Why?
 
-We'll **create** code/books/emails/content/work-outputs via collaborating with AI.
+As we integrate more technology into our lives, it's becoming clear that our interactions with these systems will be more and more AI-mediated. This project envisions a future where:
 
-We'll **manage** tasks/processes via help from AI.
+1. **Creation:** We co-create code, books, emails, work outputs, and more with AI.
+2. **Management:** AI aids in task and process handling.
+3. **Learning:** We learn and explore new concepts with AI.
+4. **Entertainment:** Our leisure times are enhanced through AI interaction.
 
-We'll **learn and explore** via collaborating with AI.
-
-We'll seek **entertainment** value from interacting with an AI.
-
-What does the ideal interface look like?
-
-This project seeks to answer that.
+This project hopes build **A Good Interface**.
 
 
-## Screencast Demo
+### But why this project?
 
-[screencast.webm](https://github.com/freckletonj/uniteai/assets/8399149/77a5293a-6f49-4cc5-9d6e-3f3e11f97925)
+
+* **The Human-AI Team:** feed off each others' strengths
+
+  |                        | **AI** | **You** |
+  |:-----------------------|--------|---------|
+  | Knows what you want    |        | ✓       |
+  | Doesn't hallucinate    |        | ✓       |
+  | Knows a ton            | ✓      |         |
+  | Thinks super fast      | ✓      |         |
+  | Easy to automate tasks | ✓      |         |
+
+* **One-for-All AI Environment:** get your AI Stack in *one* environment, get synergy among the tools.
+
+* **Self-hosted AI Stack:** more control, better security and customization.
+
+* **High speed communication:** Ultimate man-machine flow needs high-speed communication. Symbolic language is best served in a text-editor environment. Natural language integrates seamlessly via voice-to-text.
+
+* **Conclusion:** *Let's get a local AI stack cozy inside a text editor.*
 
 
 ## Quickstart
@@ -84,69 +84,70 @@ uniteai_llm
 * For other editors with LSP support (most do), we just need to copy the [emacs/vscode configuration](./clients), and translate it to your editor. Please submit a PR with new editor configs!
 
 
-## Capabilities
-
-|                                                 |   |
-|:------------------------------------------------|---|
-| **Features**                                    |   |
-| local voice-to-text                             | ✓ |
-| local LLM (eg Falcon)                           | ✓ |
-| ChatGPT & GPT API                               | ✓ |
-| Works via standard LSP                          | ✓ |
-| Only enable features you want                   | ✓ |
-|                                                 |   |
-| **Future**                                      |   |
-| Document retrieval & Embedding Indexing         | _ |
-| Prompt engineering / Assistants                 | _ |
-| Write-ahead for tab-completion                  | _ |
-| Contextualized on your files, repo, email, etc. | _ |
-| Contextualized on multiple highlighted regions  | _ |
-|                                                 |   |
-| **Editors**                                     |   |
-| emacs                                           | ✓ |
-| vscode                                          | ✓ |
-| other?                                          | _ |
-|                                                 |   |
-| **Meta**                                        |   |
-| `contrib` dir for community contributions       | ✓ |
-| well documented                                 | ✓ |
-| robust simple code                              | ✓ |
-
-
 ## Keycombos
 
 Your client configuration determines this, so if you are using the example client config examples in `./clients`:
 
-| VSCode      | Emacs   | Effect                                           |
-|:------------|:--------|:-------------------------------------------------|
-| <lightbulb> | M-'     | Show Code Actions Menu                           |
-| Ctrl-Alt-g  | C-c l g | Send region to GPT, stream output to text buffer |
-| Ctrl-Alt-c  | C-c l c | Same, but ChatGPT                                |
-| Ctrl-Alt-l  | C-c l l | Same, but local (eg Falcon) model                |
-| Ctrl-Alt-v  | C-c l v | Start voice-to-text                              |
-| Ctrl-Alt-s  | C-c l s | Whatevers streaming, stop it                     |
+| VSCode      | Emacs   | Effect                                               |
+|:------------|:--------|:-----------------------------------------------------|
+| <lightbulb> | M-'     | Show Code Actions Menu                               |
+| Ctrl-Alt-g  | C-c l g | Send region to **GPT**, stream output to text buffer |
+| Ctrl-Alt-c  | C-c l c | Same, but **ChatGPT**                                |
+| Ctrl-Alt-l  | C-c l l | Same, but **Local (eg Falcon) model**                |
+| Ctrl-Alt-v  | C-c l v | Start **voice-to-text**                              |
+| Ctrl-Alt-s  | C-c l s | Whatevers streaming, stop it                         |
 
 
 *I'm still figuring out what's most ergonomic, so, I'm accepting feedback.*
 
 
+## Contributions
+
+### Why?
+
+Because there are **so many cool tools** to yet be added:
+
+* Image creation, eg: *"Write a bulleted plan for a Hero's Journey story about X, and make an image for each scene."*
+
+* Contextualize the AI via reading my emails via POP3, and possibly responding, eg: *"what was that thing my accountant told me not to forget?"*
+
+* Ask my database natural language questions, eg: *"what were my top 10% customers' top 3 favorite products?"*
+
+* Write-ahead for tab-completion, eg: *"Once upon a ____".*
+
+* Chat with a PDF document, eg: *"what do the authors mean by X?"*
+
+* Do some searches, scrape the web, and upload it all into my db.
+
+* Sky's the limit.
+
+
+### How?
+
+A Key goal of this project is to be **Contributor-Friendly**.
+
+* Make an [Issue](https://github.com/freckletonj/uniteai/issues) with your cool concept, or bug you found.
+
+* [`.todo/`](./todo) is a directory of community "tickets", eg [`.todo/042_my_cool_feature.md`](./todo). Make a ticket or take a ticket, and make a PR with your changes!
+
+* [`./todo/README.md`](./todo/README.md) gives some overview of the library, and advice on building against this library.
+
+* a [`./contrib`](./contrib) directory is where you can add your custom feature. See [`./uniteai/contrib/example.py`](./uniteai/contrib/example.py).
+
+* `.uniteai.yml` configuration chooses which modules to load/not load.
+
+* The code is *well-documented*, *robust*, and *simple*, to reduce friction.
+
+* Adding a feature is as simple as writing some python code, and making use of `uniteai`'s library to directly handle issues like concurrency and communicating/modifying the text editor.
+
+
 ## Misc
-
-### TODO
-
-See [`./todo/README.md`](./todo/README.md).
-
-At a high level:
-
-- [ ] support other editors
-- [ ] add cool features
-
 
 ### Notes on Local LLMs
 
 The file [`./llm_server.py`](./llm_server.py) launches a TCP server in which the LLM weights are booted up. The `lsp_server` will make calls to this `llm_server`.
 
-The reason is that the `lsp_server` lifecycle is (generally*) managed by the text editor, and LLM features can be really slow to boot up. Especially if you're developing a feature, you do not want the LLM to keep being read into your GPU each time you restart the `lsp_server`.
+The reason is that the `lsp_server` lifecycle is (generally*) managed by the text editor, and LLM models can be really slow to boot up. Especially if you're developing a feature, you do not want the LLM to keep being read into your GPU each time you restart the `lsp_server`.
 
 `*` you don't have to let the editor manage the `lsp_server`. For instance, `eglot` in emacs allows you to launch it yourself, and then the editor client can just bind to the port.
 
@@ -185,7 +186,7 @@ A separate bitsandbytes issue remains unresolved, but is less serious than the a
 https://github.com/h2oai/h2ogpt/issues/104
 https://github.com/TimDettmers/bitsandbytes/issues/162
 
-# License
+## License
 
 Copyright (c) Josh Freckleton. All rights reserved.
 
