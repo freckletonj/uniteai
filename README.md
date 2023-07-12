@@ -16,8 +16,7 @@
 
 ## Screencast Demo
 
-[screencast.webm](https://github.com/freckletonj/uniteai/assets/8399149/77a5293a-6f49-4cc5-9d6e-3f3e11f97925)
-
+[screencast.webm](https://github.com/freckletonj/uniteai/raw/master/screencast.webm)
 
 ## The Vision
 
