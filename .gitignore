@@ -10,6 +10,7 @@ uniteai.egg-info/
 
 # Misc
 test.md
+test.txt
 *.log
 
 # VSCode

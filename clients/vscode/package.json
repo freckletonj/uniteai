@@ -3,7 +3,7 @@
 	"description": "Use AI in your Editor.",
 	"author": "uniteai",
 	"license": "Apache-2.0",
-	"version": "0.1.9",
+	"version": "0.1.10",
     "icon": "icon.jpeg",
 	"repository": {
 		"type": "git",
@@ -17,9 +17,14 @@
 	"engines": {
 		"vscode": "^1.75.0"
 	},
-	"activationEvents": [
-		"onLanguage:plaintext"
-	],
+    "activationEvents": [
+        "onLanguage:plaintext",
+        "onLanguage:markdown",
+        "onLanguage:python",
+        "onLanguage:javascript",
+        "onLanguage:html",
+        "onLanguage:css"
+    ],
 	"main": "./client/out/extension",
 	"scripts": {
 		"vscode:prepublish": "npm run compile",

@@ -76,9 +76,25 @@ uniteai_llm
 
 3.) Install in your editor:
 
-* For VSCode get the [`uniteai` extension](https://marketplace.visualstudio.com/publishers/uniteai). `Ctrl-P` then `ext install uniteai.uniteai` .
+* For **VSCode** get the [`uniteai` extension](https://marketplace.visualstudio.com/publishers/uniteai). Eg in VSCode, `Ctrl-P` then `ext install uniteai.uniteai` .
 
-* For Emacs, copy the [`lsp-mode` config](./clients/emacs/example_lsp_mode_config.el) to your `init.el`.
+* For **VSCodium**, VSCode Marketplace files are not compatible, so you'll need to either:
+
+  * Download the prepackaged [`uniteai.vsix`](./clients/vscode/) extension, then:
+    ```sh
+    codium --install-extension clients/vscode/uniteai.vsix
+    ```
+
+  * DIY:
+    ```sh
+    npm install -g @vscode/vsce
+    git clone https://github.com/freckletonj/uniteai
+    cd uniteai/clients/vscode
+    vsce package
+    codium --install-extension uniteai-version.vsix
+    ```
+
+* For **Emacs**, copy the [`lsp-mode` config](./clients/emacs/example_lsp_mode_config.el) to your `init.el`.
 
 * For other editors with LSP support (most do), we just need to copy the [emacs/vscode configuration](./clients), and translate it to your editor. Please submit a PR with new editor configs!
 
