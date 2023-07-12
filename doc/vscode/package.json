@@ -1,0 +1,106 @@
+{
+	"name": "lsp-sample",
+	"description": "A language server example",
+	"author": "Microsoft Corporation",
+	"license": "MIT",
+	"version": "1.0.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Microsoft/vscode-extension-samples"
+	},
+	"publisher": "vscode-samples",
+	"categories": [],
+	"keywords": [
+		"multi-root ready"
+	],
+	"engines": {
+		"vscode": "^1.75.0"
+	},
+	"activationEvents": [
+		"onLanguage:plaintext"
+	],
+	"main": "./client/out/extension",
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -b",
+		"watch": "tsc -b -w",
+		"lint": "eslint ./client/src --ext .ts,.tsx",
+		"postinstall": "cd client && npm install && cd ..",
+		"test": "sh ./scripts/e2e.sh"
+	},
+	"devDependencies": {
+		"@types/mocha": "^9.1.0",
+		"@types/node": "^16.18.34",
+		"@typescript-eslint/eslint-plugin": "^5.54.0",
+		"@typescript-eslint/parser": "^5.54.0",
+		"eslint": "^8.35.0",
+		"mocha": "^9.2.1",
+		"typescript": "^5.1.3"
+	},
+    "contributes": {
+        "commands": [
+            {
+                "command": "command.stop",
+                "title": "LSP Stop"
+            },
+            {
+                "command": "command.exampleCounter",
+                "title": "LSP Example Counter"
+            },
+            {
+                "command": "command.localLlm",
+                "title": "LSP Local LLM"
+            },
+            {
+                "command": "command.transcribe",
+                "title": "LSP Transcribe"
+            },
+            {
+                "command": "command.openaiGpt",
+                "title": "LSP OpenAI GPT"
+            },
+            {
+                "command": "command.openaiChatgpt",
+                "title": "LSP OpenAI ChatGPT"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "command.stop",
+                "key": "ctrl+alt+s",
+                "mac": "cmd+alt+s",
+                "when": "editorTextFocus"
+            },
+            {
+                "command": "command.exampleCounter",
+                "key": "ctrl+alt+e",
+                "mac": "cmd+alt+e",
+                "when": "editorTextFocus"
+            },
+            {
+                "command": "command.localLlm",
+                "key": "ctrl+alt+l",
+                "mac": "cmd+alt+l",
+                "when": "editorTextFocus"
+            },
+            {
+                "command": "command.transcribe",
+                "key": "ctrl+alt+v",
+                "mac": "cmd+alt+v",
+                "when": "editorTextFocus"
+            },
+            {
+                "command": "command.openaiGpt",
+                "key": "ctrl+alt+g",
+                "mac": "cmd+alt+g",
+                "when": "editorTextFocus"
+            },
+            {
+                "command": "command.openaiChatgpt",
+                "key": "ctrl+alt+c",
+                "mac": "cmd+alt+c",
+                "when": "editorTextFocus"
+            }
+        ]
+    }
+}

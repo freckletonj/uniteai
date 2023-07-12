@@ -10,3 +10,8 @@ uniteai.egg-info/
 
 # Misc
 test.md
+*.log
+
+# VSCode
+.vscode/
+node_modules/
