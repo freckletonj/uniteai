@@ -1,3 +1,19 @@
+<p align="center">
+  <img width="256" height="256" src="https://raw.githubusercontent.com/freckletonj/uniteai/master/icon.jpeg" alt='uniteai'>
+</p>
+
+<p align="center">
+<em>UniteAI: Voice-to-text, Local LLM, and GPT, right in your editor.</em>
+</p>
+
+---
+[![Package version](https://badge.fury.io/py/uniteai.svg)](https://pypi.python.org/pypi/uniteai)
+
+**Requirements:** Python 3
+
+**Editor:** VSCode(ium) or Emacs or any editor with LSP capabilities (most).
+
+
 # uniteai
 
 Interact with local/cloud AIs via the editor you already use, directly inside the document you're editing.
@@ -38,6 +54,36 @@ This project seeks to answer that.
 
 [screencast.webm](https://github.com/freckletonj/uniteai/assets/8399149/77a5293a-6f49-4cc5-9d6e-3f3e11f97925)
 
+
+## Quickstart
+
+1.) Get: `uniteai_lsp`.
+
+```sh
+sudo apt install portaudio19-dev  # only if you want voice-to-text
+pip install uniteai[all]
+uniteai_lsp
+```
+
+It will prompt if it should make a default `.uniteai.yml` config for you. Update your preferences, including your OpenAI API key if you want that, and which local language model or transcription models you want.
+
+
+2.) *Optional:* Then start the longlived LLM server which offers your editor a connection to your local large language model.
+
+```sh
+uniteai_llm
+```
+
+
+3.) Install in your editor:
+
+* For VSCode get the [`uniteai` extension](https://marketplace.visualstudio.com/publishers/uniteai). `Ctrl-P` then `ext install uniteai.uniteai` .
+
+* For Emacs, copy the [`lsp-mode` config](./clients/emacs/example_lsp_mode_config.el) to your `init.el`.
+
+* For other editors with LSP support (most do), we just need to copy the [emacs/vscode configuration](./clients), and translate it to your editor. Please submit a PR with new editor configs!
+
+
 ## Capabilities
 
 |                                                 |   |
@@ -58,10 +104,8 @@ This project seeks to answer that.
 |                                                 |   |
 | **Editors**                                     |   |
 | emacs                                           | ✓ |
-| vscode                                          | _ |
-| vim                                             | _ |
-| jetbrains                                       | _ |
-| atom                                            | _ |
+| vscode                                          | ✓ |
+| other?                                          | _ |
 |                                                 |   |
 | **Meta**                                        |   |
 | `contrib` dir for community contributions       | ✓ |
@@ -69,79 +113,21 @@ This project seeks to answer that.
 | robust simple code                              | ✓ |
 
 
-## Setup
+## Keycombos
 
-Setup code is crazy simple (see: [`doc/example_lsp_mode_config.el`](./doc/example_lsp_mode_config.el)), but I only use emacs (on ubuntu), and would love some help for the other environments.
+Your client configuration determines this, so if you are using the example client config examples in `./clients`:
 
-
-### Emacs
-
-#### 1. Setup
-
-```
-git clone git@github.com:freckletonj/uniteai
-cd uniteai/
-pip install -r requirements.txt
-sudo apt install portaudio19-dev  # if you want transcription
-```
+| VSCode      | Emacs   | Effect                                           |
+|:------------|:--------|:-------------------------------------------------|
+| <lightbulb> | M-'     | Show Code Actions Menu                           |
+| Ctrl-Alt-g  | C-c l g | Send region to GPT, stream output to text buffer |
+| Ctrl-Alt-c  | C-c l c | Same, but ChatGPT                                |
+| Ctrl-Alt-l  | C-c l l | Same, but local (eg Falcon) model                |
+| Ctrl-Alt-v  | C-c l v | Start voice-to-text                              |
+| Ctrl-Alt-s  | C-c l s | Whatevers streaming, stop it                     |
 
 
-#### 2. Setup emacs's `init.el`
-
-* `lsp-mode`: `lsp-mode` is recommended because it allows multipe LSPs to run in parallel in the same buffer (eg `uniteai` and your python LSP). See [`doc/example_lsp_mode_config.el`](./doc/example_lsp_mode_config.el).
-
-* `EGlot`: See [`doc/example_eglot_config.el`](./doc/example_eglot_config.el):
-
-
-#### 3. Optional: Run the local LLM server
-
-```
-uvicorn llm_server:app --port 8000
-```
-
-This reads your `.uniteai.yml` configuration  (example is in the repo) to find a Transformers-compatible model, eg Falcon, and will run it.
-
-I imagine if you point at the dir of any Transformers-compatible model, this should work.
-
-
-#### 4. Give it a go.
-
-**Keycombos**
-
-Your client configuration determines this, so if you are using the example client config examples in `./doc`:
-
-| Keycombo | Effect                                           |
-|:---------|:-------------------------------------------------|
-| M-'      | Show Code Actions Menu                           |
-|          |                                                  |
-| C-c l g  | Send region to GPT, stream output to text buffer |
-| C-c l c  | Same, but ChatGPT                                |
-|          |                                                  |
-| C-c l l  | Same, but local (eg Falcon) model                |
-|          |                                                  |
-| C-c l v  | Start transcribing from microphone               |
-|          |                                                  |
-| C-c l s  | Whatevers streaming, stop it                     |
-
-
-### vscode
-
-Accepting contributions. See [`.doc/`](./doc) for examples in other editors, it's quite simple.
-
-
-### vim
-
-Accepting contributions. See [`.doc/`](./doc) for examples in other editors, it's quite simple.
-
-
-### jetbrains
-
-Accepting contributions. See [`.doc/`](./doc) for examples in other editors, it's quite simple.
-
-
-### atom
-
-Accepting contributions. See [`.doc/`](./doc) for examples in other editors, it's quite simple.
+*I'm still figuring out what's most ergonomic, so, I'm accepting feedback.*
 
 
 ## Misc
