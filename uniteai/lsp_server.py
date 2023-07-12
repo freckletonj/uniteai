@@ -30,10 +30,14 @@ import importlib
 #       formatter, see: `thespian.system.simpleSystemBase`.
 #
 #       Also, https://github.com/thespianpy/Thespian/issues/73
+#
+# NOTE: VSCode thinks the server is erroring if it logs to stdout from the main
+#       thread, but spawned threads don't seem to have the same effect.
 
 logging.basicConfig(
-    stream=sys.stdout,
-    level=logging.DEBUG,  # Globally allow any level. Other loggers can narrow.
+    filename='log_file.log', # TODO: feature loggers still seem to report on stdout
+    # stream=sys.stdout,
+    level=logging.DEBUG,
 )
 
 # Quiet the libs a little

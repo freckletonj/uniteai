@@ -18,7 +18,11 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from thespian.actors import ActorSystem
 import uniteai.edit as edit
+import logging
+from uniteai.common import mk_logger
 
+NAME = 'server.py'
+log = mk_logger(NAME, logging.DEBUG)
 
 ##################################################
 # Server
@@ -88,6 +92,7 @@ def initialize():
         '''
         Tell ALL actors to stop.
         '''
+        log.debug(f'STOPS ARGS: {args}')
         text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
         uri = text_document.uri
         doc = ls.workspace.get_document(uri)
@@ -110,11 +115,13 @@ def initialize():
 
 
 def code_action_stop(params: CodeActionParams):
+    text_document = params.text_document
     return CodeAction(
                 title='Stop Streaming Things',
                 kind=CodeActionKind.Refactor,
                 command=Command(
                     title='Stop Streaming Things',
-                    command='command.stop'
+                    command='command.stop',
+                    arguments=[text_document]
                 )
             )
