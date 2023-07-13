@@ -1,6 +1,7 @@
 '''
 
-Transcribe Speech.
+Speech-to-text
+
 
 '''
 
@@ -124,29 +125,15 @@ class SpeechRecognition:
         warmup_thread.daemon = True
         warmup_thread.start()
 
-    def listen_worker(self, should_stop, listen_worker_is_running):
-        log.debug('STARTING L WORKER')
-        listen_worker_is_running.set()
-        with sr.Microphone() as source:
-            try:
-                while not should_stop.is_set():
-                    log.debug(f'LISTEN AUDIO. should_stop={should_stop.is_set()}')
-                    try:
-                        audio = self.r.listen(source, timeout=0.5)
-                        self.audio_queue.put(audio, block=False)
-                    except sr.WaitTimeoutError:
-                        pass
-            except KeyboardInterrupt:
-                pass
-
-        # Drain audio queue
-        try:
-            while True:
-                self.audio_queue.get(False)
-        except Empty:
-            pass
-        listen_worker_is_running.clear()
-        log.debug('DONE LISTENING')
+    def listen(self, should_stop):
+        def callback(r, audio):
+            log.debug('LISTENING CALLBACK called')
+            self.audio_queue.put(audio, block=False)
+        stop_listening_fn = self.r.listen_in_background(
+            sr.Microphone(),
+            callback
+        )
+        return stop_listening_fn
 
     def transcription_worker(self, uri, edits, should_stop,
                              transcription_worker_is_running):
@@ -190,39 +177,34 @@ class SpeechRecognition:
         log.debug('DONE TRANSCRIBING')
 
 
-
 ##################################################
 # Actor
 
 class TranscriptionActor(Actor):
     def __init__(self):
-        self.listen_worker_is_running = Event()
         self.transcription_worker_is_running = Event()
         self.should_stop = Event()
         self.tags = [START_TAG, END_TAG]
         self.speech_recognition = None  # set during initialization
         self.executor = ThreadPoolExecutor(max_workers=5)
-        self.listen_thread_future = None
         self.transcription_thread_future = None
 
-        # set during set_config
+        # set during set_config/start
         self.model_path = None
         self.model_size = None
         self.volume_threshold = None
+        self.stop_listening_fn = lambda x,y: None
 
     def receiveMessage(self, msg, sender):
         command = msg.get('command')
         edits = msg.get('edits')
-        lw_set = self.listen_worker_is_running.is_set()
         tw_set = self.transcription_worker_is_running.is_set()
         log.debug(f'''
 %%%%%%%%%%
 ACTOR RECV: {msg["command"]}
 ACTOR STATE:
-listen_worker is running={lw_set}.
 transcription_worker is running={tw_set}
 should_stop: {self.should_stop.is_set()}
-listen_thread_future: {self.listen_thread_future}
 transcription_thread_future: {self.transcription_thread_future}
 
 EDITS STATE:
@@ -268,7 +250,6 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
             if self.model_type == 'whisper':
                 self.model_size = config.transcription_model_size
 
-
         elif command == 'initialize':
             log.debug(f'INIT TYPE: {self.model_type}')
             self.speech_recognition = SpeechRecognition(
@@ -284,20 +265,16 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
             self.speech_recognition.warmup()
 
     def start(self, uri, cursor_pos, edits):
-        lw_set = self.listen_worker_is_running.is_set()
         tw_set = self.transcription_worker_is_running.is_set()
-        if lw_set or tw_set:
+        if tw_set:
             log.info(f'WARN: ON_START_BUT_RUNNING. '
-                     f'listen_worker is running={lw_set}. '
                      f'transcription_worker is running={tw_set}')
             return
         log.debug('ACTOR START')
         self.should_stop.clear()
 
         # Audio Listener
-        self.listen_thread_future = self.executor.submit(
-            self.speech_recognition.listen_worker,
-            self.should_stop, self.listen_worker_is_running)
+        self.stop_listening_fn = self.speech_recognition.listen(self.should_stop)
 
         # Transcriber
         self.transcription_thread_future = self.executor.submit(
@@ -308,26 +285,22 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
 
     def stop(self):
         log.debug('ACTOR STOP')
-        lw_set = self.listen_worker_is_running.is_set()
         tw_set = self.transcription_worker_is_running.is_set()
-        if not lw_set or not tw_set:
+        if not tw_set:
             log.info('WARN: ON_STOP_BUT_STOPPED'
-                     f'listen_worker is running={lw_set}. '
                      f'transcription_worker is running={tw_set}')
+            return False
 
         self.should_stop.set()
-
-        if self.listen_thread_future:
-            log.debug('Waiting for audio `listen_thread_future` to terminate')
-            # self.listen_thread_future.result()  # block, wait to finish
-            self.listen_thread_future = None  # reset
+        self.stop_listening_fn(wait_for_stop=False)
 
         if self.transcription_thread_future:
             log.debug('Waiting for audio `transcription_thread_future` to terminate')
-            # self.transcription_thread_future.result()  # block, wait to finish
+            self.transcription_thread_future.result()  # block, wait to finish
             self.transcription_thread_future = None  # reset
 
         self.should_stop.clear()
+        self.stop_listening_fn = lambda x,y: None
         log.debug('FINALLY STOPPED')
 
 
