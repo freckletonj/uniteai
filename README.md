@@ -54,12 +54,16 @@ This project hopes build **A Good Interface**.
 * **Conclusion:** *Let's get a local AI stack cozy inside a text editor.*
 
 
-## Quickstart
+## Quickstart, installing Everything on Ubuntu
+
+You can install more granularly than *everything*, but we'll demo *everything* first.
+
+The only platform-dependent dependency right now is `portaudio`, which I mention in the next section how to install for linux/mac.
 
 1.) Get: `uniteai_lsp`.
 
 ```sh
-sudo apt install portaudio19-dev  # only if you want voice-to-text
+sudo apt install portaudio19-dev
 pip install uniteai[all]
 uniteai_lsp
 ```
@@ -98,6 +102,37 @@ uniteai_llm
 
 * For other editors with LSP support (most do), we just need to copy the [emacs/vscode configuration](./clients), and translate it to your editor. Please submit a PR with new editor configs!
 
+## Granular installs
+
+Still refer to the Quickstart section for the main workflow, such as calling `uniteai_lsp` to get your default config made.
+
+Your config determines what modules/features are loaded.
+
+The following makes sure to get your dependencies for each feature.
+
+### Transcription dependencies
+
+```sh
+# Debian/Ubuntu
+sudo apt install portaudio19-dev  # needed by PyAudio
+
+# Mac
+brew install portaudio  # needed by PyAudio
+
+pip install uniteai[transcription]
+```
+
+### Local LLM dependencies
+
+```sh
+pip install uniteai[local_llm]
+```
+
+### OpenAI/ChatGPT dependencies
+
+```sh
+pip install uniteai[openai]
+```
 
 ## Keycombos
 
