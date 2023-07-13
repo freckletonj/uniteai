@@ -11,19 +11,6 @@ import {
 
 let client: LanguageClient;
 
-// An example of limiting what file types this should apply to
-//    https://code.visualstudio.com/docs/languages/identifiers
-const limited_file_types = {
-    documentSelector: [
-        {scheme: 'file', language: 'plaintext'},
-        {scheme: 'file', language: 'python'},
-        {scheme: 'file', language: 'markdown'}
-    ],
-    synchronize: {
-        fileEvents: workspace.createFileSystemWatcher('**/*.py')
-    }
-};
-
 // Experiment with applying to all file types. May have unexpected results, so
 // we may need a huge list of opted-in file types.
 //   https://code.visualstudio.com/docs/languages/identifiers
