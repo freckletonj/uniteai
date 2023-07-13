@@ -7,6 +7,7 @@ Jobs for applying textual edits to the LSP client
 from typing import List, Union
 import pygls
 from pygls.server import LanguageServer
+from pygls.workspace import Workspace
 from lsprotocol.types import (
     ApplyWorkspaceEditParams,
     Range,
@@ -20,7 +21,7 @@ from dataclasses import dataclass
 from uniteai.common import find_tag, workspace_edit, workspace_edits, mk_logger
 import logging
 
-log = mk_logger('edit', logging.WARN)
+log = mk_logger('edit', logging.DEBUG)
 
 
 ##################################################
@@ -176,7 +177,6 @@ class Edits:
                         failed_count += 1
             time.sleep(self.job_delay)
 
-
 def _attempt_edit_job(ls: LanguageServer, job: LSPJob):
     if isinstance(job, InsertJob):
         return _attempt_insert_job(ls, job)
@@ -196,7 +196,12 @@ def _attempt_insert_job(ls: LanguageServer, job: InsertJob):
     log.debug('APPLYING INSERT')
     try:
         doc = ls.workspace.get_document(job.uri)
+        if not doc:
+            log.error(f'Document not managed by Workspace. Make sure this file type is managed by the client, so it sends `didOpen`. uri={job.uri}')
+            return False
+
         version = doc.version
+        log.debug(f'INSERT: uri={job.uri}, doc={doc}, version={version}')
         position = Position(job.line, job.column)
         edit = workspace_edit(job.uri,
                               version,
@@ -225,6 +230,9 @@ def _attempt_delete_job(ls: LanguageServer, job: DeleteJob):
     '''
     try:
         doc = ls.workspace.get_document(job.uri)
+        if not doc:
+            log.error(f'Document not managed by Workspace. Make sure this file type is managed by the client, so it sends `didOpen`. uri={job.uri}')
+            return False
         version = doc.version
         doc_lines = doc.source.split('\n')
 
@@ -276,8 +284,12 @@ def _attempt_block_job(ls: LanguageServer, job: BlockJob):
     log.debug('APPLYING BLOCK')
     try:
         doc = ls.workspace.get_document(job.uri)
+        if not doc:
+            log.error(f'Document not managed by Workspace. Make sure this file type is managed by the client, so it sends `didOpen`. uri={job.uri}. All docs: {ls.workspace.documents.keys()}')
+            return False
         version = doc.version
         doc_lines = doc.source.split('\n')
+        log.debug(f'BLOCK CONTEXT: uri={job.uri}, version={version}, doc={type(doc)}|{doc}, doc_source[:100]={doc.source[:100]}')
 
         m_start = find_tag(job.start_tag, doc_lines)
         m_end = find_tag(job.end_tag, doc_lines)
