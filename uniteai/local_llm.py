@@ -28,7 +28,7 @@ from uniteai.server import Server
 START_TAG = ':START_LOCAL:'
 END_TAG = ':END_LOCAL:'
 NAME = 'local_llm'
-log = mk_logger(NAME, logging.DEBUG)
+log = mk_logger(NAME, logging.WARN)
 
 
 class LocalLLMActor(Actor):
@@ -246,6 +246,8 @@ def initialize(config, server):
     @server.thread()
     @server.command('command.localLlmStream')
     def local_llm_stream(ls: Server, args):
+        if len(args) != 2:
+            log.error(f'command.localLlmStream: Wrong arguments, received: {args}')
         text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
         range = ls.converter.structure(args[1], Range)
         uri = text_document.uri

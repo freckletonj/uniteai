@@ -34,7 +34,7 @@ NAME = 'example'
 
 # A custom logger for just this feature. You can tune the log level to turn
 # on/off just this feature's logs.
-log = mk_logger(NAME, logging.DEBUG)
+log = mk_logger(NAME, logging.WARN)
 
 
 class ExampleActor(Actor):
@@ -89,9 +89,10 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
         ##########
         # Set Config
         elif command == 'set_config':
-            self.start_digit = msg.get('start_digit')
-            self.end_digit = msg.get('end_digit')
-            self.delay = msg.get('delay')
+            config = msg['config']
+            self.start_digit = config.example_start_digit
+            self.end_digit = config.example_end_digit
+            self.delay = config.example_delay
 
     def start(self, uri, cursor_pos, engine, max_length, edits):
         if self.is_running:
@@ -223,7 +224,7 @@ def initialize(config, server):
     # Initialize configuration in Actor
     server.tell_actor(NAME, {
         'command': 'set_config',
-        **vars(config)  # argparse.Namespace -> dict
+        'config': config,
     })
 
     # CodeActions
@@ -235,6 +236,8 @@ def initialize(config, server):
     @server.thread()
     @server.command('command.exampleCounter')
     def example_counter(ls: Server, args):
+        if len(args) != 2:
+            log.error(f'command.exampleCounter: Wrong arguments, received: {args}')
         text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
         cursor_pos = ls.converter.structure(args[1], Position)
         uri = text_document.uri

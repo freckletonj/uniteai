@@ -52,7 +52,7 @@ NAME = 'transcription'
 
 # A custom logger for just this feature. You can tune the log level to turn
 # on/off just this feature's logs.
-log = mk_logger(NAME, logging.WARN)
+log = mk_logger(NAME, logging.DEBUG)
 
 
 ##################################################
@@ -109,6 +109,9 @@ class SpeechRecognition:
         self.recognize(empty_audio)
         logging.info('Warmed up transcription model')
 
+        # TODO: Transcription needs to be tuned better to deal with ambient
+        # noise, and appropriate volume levels
+        #
         logging.info('Adjusting thresholds for ambient noise')
         with sr.Microphone() as source:
             self.r.adjust_for_ambient_noise(source)
@@ -164,13 +167,6 @@ class SpeechRecognition:
                     continue
 
                 x = x.strip()
-                # x = self.r.recognize_whisper(audio,
-                #                              model=self.model_size,
-                #                              load_options=dict(
-                #                                  device='cuda:0',
-                #                                  download_root=self.model_path
-                #                              ), language='english').strip()
-
                 log.debug(f'TRANSCRIPTION: {x}')
                 if filter_out(x):
                     continue
@@ -323,12 +319,12 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
 
         if self.listen_thread_future:
             log.debug('Waiting for audio `listen_thread_future` to terminate')
-            self.listen_thread_future.result()  # block, wait to finish
+            # self.listen_thread_future.result()  # block, wait to finish
             self.listen_thread_future = None  # reset
 
         if self.transcription_thread_future:
             log.debug('Waiting for audio `transcription_thread_future` to terminate')
-            self.transcription_thread_future.result()  # block, wait to finish
+            # self.transcription_thread_future.result()  # block, wait to finish
             self.transcription_thread_future = None  # reset
 
         self.should_stop.clear()
@@ -416,6 +412,8 @@ def initialize(config: argparse.Namespace, server):
     @server.thread()
     @server.command('command.transcribe')
     def transcribe_stream(ls: LanguageServer, args):
+        if len(args) != 2:
+            log.error(f'command.transcribe: Wrong arguments, received: {args}')
         # Prepare args
         text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
         uri = text_document.uri

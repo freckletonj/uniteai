@@ -288,6 +288,8 @@ def initialize(config, server):
     @server.thread()
     @server.command('command.openaiAutocompleteStream')
     def openai_autocomplete_stream(ls: Server, args):
+        if len(args) != 4:
+            log.error(f'command.openaiAutocompleteStream: Wrong arguments, received: {args}')
         text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
         range = ls.converter.structure(args[1], Range)
         uri = text_document.uri

@@ -12,6 +12,12 @@ from lsprotocol.types import (
     CodeActionParams,
     Command,
     TextDocumentIdentifier,
+
+    TEXT_DOCUMENT_DID_OPEN,
+    DidOpenTextDocumentParams,
+    Diagnostic,
+    Range,
+    Position,
 )
 from pygls.protocol import default_converter
 from concurrent.futures import ThreadPoolExecutor
@@ -75,9 +81,17 @@ def initialize():
     server = Server("uniteai", "0.1.0")
 
     @server.feature('workspace/didChangeConfiguration')
-    def workspace_did_change_configuration(ls: Server, *args):
+    def workspace_did_change_configuration(ls: Server, args):
         ''' There's a warning without this. '''
+        log.debug(f'workspace/didChangeConfiguration: args={args}')
         return []
+
+    @server.feature(TEXT_DOCUMENT_DID_OPEN)
+    async def did_open(ls: Server, params: DidOpenTextDocumentParams):
+        """Text document did open notification. It appears this does not
+        overwrite the default `didOpen` handler in pygls, so we can add extra
+        `didOpen` logic here."""
+        log.debug(f'Document did open: uri={params.text_document.uri}')
 
     @server.feature("textDocument/codeAction")
     def code_action(params: CodeActionParams) -> List[CodeAction]:
@@ -92,7 +106,8 @@ def initialize():
         '''
         Tell ALL actors to stop.
         '''
-        log.debug(f'STOPS ARGS: {args}')
+        if len(args) != 1:
+            log.error(f'command.stop: Wrong arguments, received: {args}')
         text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
         uri = text_document.uri
         doc = ls.workspace.get_document(uri)

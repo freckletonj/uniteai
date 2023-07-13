@@ -20,6 +20,7 @@ from lsprotocol.types import (
     Range,
     TextDocumentIdentifier,
     VersionedTextDocumentIdentifier,
+    OptionalVersionedTextDocumentIdentifier,
     TextEdit,
     WorkspaceEdit,
     DidChangeTextDocumentParams,
@@ -152,7 +153,7 @@ def workspace_edit(uri: str,
     ''' Build a `WorkspaceEdit` for pygls to send to LSP client. '''
     text_edit = TextEdit(range=Range(start=start, end=end), new_text=new_text)
     text_document_edit = {
-        'textDocument': VersionedTextDocumentIdentifier(uri=uri,
+        'textDocument': OptionalVersionedTextDocumentIdentifier(uri=uri,
                                                         version=version),
         'edits': [text_edit],
     }
@@ -169,7 +170,7 @@ def workspace_edits(uri: str,
         for start, end, new_text in start_end_text
     ]
     text_document_edit = {
-        'textDocument': VersionedTextDocumentIdentifier(uri=uri,
+        'textDocument': OptionalVersionedTextDocumentIdentifier(uri=uri,
                                                         version=version),
         'edits': text_edits,
     }
