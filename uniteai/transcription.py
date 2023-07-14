@@ -7,30 +7,17 @@ Speech-to-text
 
 from thespian.actors import Actor
 from typing import List
-import pygls
 from pygls.server import LanguageServer
 from lsprotocol.types import (
-    ApplyWorkspaceEditParams,
     CodeAction,
     CodeActionKind,
     CodeActionParams,
     Command,
     Position,
-    Range,
     TextDocumentIdentifier,
-    VersionedTextDocumentIdentifier,
-    TextEdit,
-    WorkspaceEdit,
-    DidChangeTextDocumentParams,
 )
-import sys
 import logging
-from pygls.protocol import default_converter
-import requests
-import json
 from concurrent.futures import ThreadPoolExecutor
-import openai
-import yaml
 from threading import Thread, Lock, Event
 from queue import Queue, Empty
 import speech_recognition as sr
@@ -39,8 +26,6 @@ import numpy as np
 import time
 from dataclasses import dataclass
 from typing import List, Tuple
-import re
-import itertools
 import argparse
 
 from uniteai.common import ThreadSafeCounter, mk_logger, find_block, get_nested
@@ -117,10 +102,9 @@ class SpeechRecognition:
         with sr.Microphone() as source:
             self.r.adjust_for_ambient_noise(source)
 
-
     def warmup(self):
         '''Load whisper model into memory.'''
-        logging.info('Warming up whisper in separate thread')
+        logging.info('Warming up transcription model in separate thread')
         warmup_thread = Thread(target=self._warmup)
         warmup_thread.daemon = True
         warmup_thread.start()
@@ -131,7 +115,8 @@ class SpeechRecognition:
             self.audio_queue.put(audio, block=False)
         stop_listening_fn = self.r.listen_in_background(
             sr.Microphone(),
-            callback
+            callback,
+            phrase_time_limit=1.0
         )
         return stop_listening_fn
 
@@ -193,7 +178,7 @@ class TranscriptionActor(Actor):
         self.model_path = None
         self.model_size = None
         self.volume_threshold = None
-        self.stop_listening_fn = lambda x,y: None
+        self.stop_listening_fn = lambda x, y: None
 
     def receiveMessage(self, msg, sender):
         command = msg.get('command')
@@ -300,7 +285,7 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
             self.transcription_thread_future = None  # reset
 
         self.should_stop.clear()
-        self.stop_listening_fn = lambda x,y: None
+        self.stop_listening_fn = lambda x, y: None
         log.debug('FINALLY STOPPED')
 
 
