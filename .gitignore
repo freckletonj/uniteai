@@ -12,6 +12,7 @@ uniteai.egg-info/
 test.md
 test.txt
 *.log
+debug_transcription.wav
 
 # VSCode
 .vscode/

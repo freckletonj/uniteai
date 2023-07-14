@@ -43,27 +43,6 @@ def mk_logger(name, level):
     return logger
 
 
-
-##################################################
-
-class ThreadSafeCounter:
-    '''
-    A threadsafe incrementable integer.
-    '''
-
-    def __init__(self):
-        self.value = 0
-        self._lock = Lock()
-
-    def increment(self):
-        with self._lock:
-            self.value += 1
-            return self.value
-
-    def get(self):
-        return self.value
-
-
 ##################################################
 # Dict helpers
 

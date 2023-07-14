@@ -6,46 +6,28 @@ Speech-to-text
 '''
 
 from thespian.actors import Actor
-from typing import List
-import pygls
 from pygls.server import LanguageServer
 from lsprotocol.types import (
-    ApplyWorkspaceEditParams,
     CodeAction,
     CodeActionKind,
     CodeActionParams,
     Command,
     Position,
-    Range,
     TextDocumentIdentifier,
-    VersionedTextDocumentIdentifier,
-    TextEdit,
-    WorkspaceEdit,
-    DidChangeTextDocumentParams,
 )
-import sys
 import logging
-from pygls.protocol import default_converter
-import requests
-import json
-from concurrent.futures import ThreadPoolExecutor
-import openai
-import yaml
-from threading import Thread, Lock, Event
+from threading import Thread, Event
 from queue import Queue, Empty
 import speech_recognition as sr
 import re
 import numpy as np
 import time
-from dataclasses import dataclass
-from typing import List, Tuple
-import re
-import itertools
 import argparse
+import threading
+from functools import partial
 
-from uniteai.common import ThreadSafeCounter, mk_logger, find_block, get_nested
+from uniteai.common import mk_logger, find_block, get_nested
 from uniteai.edit import BlockJob, cleanup_block, init_block
-
 
 START_TAG = ':START_TRANSCRIPTION:'
 END_TAG = ':END_TRANSCRIPTION:'
@@ -53,7 +35,8 @@ NAME = 'transcription'
 
 # A custom logger for just this feature. You can tune the log level to turn
 # on/off just this feature's logs.
-log = mk_logger(NAME, logging.DEBUG)
+log_level = logging.DEBUG
+log = mk_logger(NAME, log_level)
 
 
 ##################################################
@@ -67,22 +50,17 @@ class SpeechRecognition:
                  model_path,
                  model_size,
                  volume_threshold):
-
         self.model_type = model_type
         self.model_path = model_path
         self.model_size = model_size
 
         # Recognizer
         self.r = sr.Recognizer()
+        self.mic = sr.Microphone()
+        self.sample_rate = None
+        self.sample_width = None
         self.r.energy_threshold = volume_threshold
         self.r.dynamic_energy_threshold = False
-        self.audio_queue = Queue()
-
-        # Keep track of the iteration when a thread was started. That way, if
-        # it had a blocking operation (like `r.listen`) that should have been
-        # terminated, but couldn't because the thread was blocked, well, now we
-        # can deprecate that thread.
-        self.transcription_counter = ThreadSafeCounter()
 
     def recognize(self, audio):
         log.debug(f'MODEL_TYPE: {self.model_type}')
@@ -106,75 +84,130 @@ class SpeechRecognition:
 
     def _warmup(self):
         ''' Warm up, intended for a separate thread. '''
+
+        # Get some mic params
+        with self.mic as source:
+            self.sample_rate = source.SAMPLE_RATE
+            self.sample_width = source.SAMPLE_WIDTH
+
+        # Get model into memory
         empty_audio = sr.AudioData(np.zeros(10), sample_rate=1, sample_width=1)
         self.recognize(empty_audio)
-        logging.info('Warmed up transcription model')
-
-        # TODO: Transcription needs to be tuned better to deal with ambient
-        # noise, and appropriate volume levels
-        #
-        logging.info('Adjusting thresholds for ambient noise')
-        with sr.Microphone() as source:
-            self.r.adjust_for_ambient_noise(source)
-
+        log.info(f'Warmed up. sample_rate={self.sample_rate}, sample_width={self.sample_width}')
 
     def warmup(self):
         '''Load whisper model into memory.'''
-        logging.info('Warming up whisper in separate thread')
+        log.info('Warming up transcription model in separate thread')
         warmup_thread = Thread(target=self._warmup)
         warmup_thread.daemon = True
         warmup_thread.start()
 
-    def listen(self, should_stop):
-        def callback(r, audio):
-            log.debug('LISTENING CALLBACK called')
-            self.audio_queue.put(audio, block=False)
-        stop_listening_fn = self.r.listen_in_background(
-            sr.Microphone(),
-            callback
-        )
-        return stop_listening_fn
+    def listen_(self,
+                queue: Queue,
+                should_stop: Event):
+        with sr.Microphone() as s:
+            while not should_stop.is_set():
+                buf = s.stream.read(s.CHUNK)
+                queue.put(buf)
 
-    def transcription_worker(self, uri, edits, should_stop,
-                             transcription_worker_is_running):
-        transcription_worker_is_running.set()
-        running_transcription = ""
+    def transcription_(self,
+                       audio_queue,
+                       transcription_callback,
+                       finished_callback,
+                       should_stop):
+        audios = []
         while not should_stop.is_set():
             try:
                 # non-blocking, to more frequently allow the
                 # `stop_transcription` signal to end this thread.
-                audio = self.audio_queue.get(False)
+                buffer = audio_queue.get(False)
+
+                # TODO: can we more intelligently separate silence from speech?
+                # energy = audioop.rms(buffer, self.sample_width)
+                audios.append(buffer)
+                try:
+                    while True:
+                        buffer = audio_queue.get(False)
+                        audios.append(buffer)
+                except Empty:
+                    pass
+
+                log.debug(f'len audio: {len(audios)}')
+
             except Empty:
                 time.sleep(0.2)
                 continue
 
             try:
+                audio = sr.audio.AudioData(
+                    b''.join(audios),
+                    self.sample_rate,
+                    self.sample_width
+                )
+                # Debug audio: The audio gets sliced up regularly, how does it
+                #              sound when stitched back?
+                if log_level == logging.DEBUG:
+                    with open("debug_transcription.wav", "wb") as output_file:
+                        output_file.write(audio.get_wav_data())
+
+                # breakout if needed
+                if should_stop.is_set():
+                    break
+
+                # Speech-to-text
                 x = self.recognize(audio)
+
+                # Nothing recognized
                 if not x:
                     continue
 
                 x = x.strip()
-                log.debug(f'TRANSCRIPTION: {x}')
                 if filter_out(x):
                     continue
 
-                # Add space to respect next loop of transcription
-                running_transcription += x + ' '
-                job = BlockJob(
-                    uri=uri,
-                    start_tag=START_TAG,
-                    end_tag=END_TAG,
-                    text=f'\n{running_transcription}\n',
-                    strict=False,
-                )
-                edits.add_job(NAME, job)
+                # breakout if needed
+                if should_stop.is_set():
+                    break
+
+                transcription_callback(x)
+
             except sr.UnknownValueError:
                 log.debug("ERROR: could not understand audio")
-            self.audio_queue.task_done()
+            audio_queue.task_done()
 
-        cleanup_block(NAME, [START_TAG, END_TAG], uri, edits)
-        transcription_worker_is_running.clear()
+        finished_callback()
         log.debug('DONE TRANSCRIBING')
+
+    def go(self,
+           transcription_callback,
+           finished_callback):
+        audio_queue = Queue()
+        should_stop = Event()
+
+        # Listener Thread
+        l_thread = threading.Thread(
+            target=self.listen_,
+            args=(audio_queue, should_stop))
+        l_thread.daemon = True
+        l_thread.start()
+
+        # Transcription Thread
+        t_thread = threading.Thread(
+            target=self.transcription_,
+            args=(audio_queue,
+                  transcription_callback,
+                  finished_callback,
+                  should_stop))
+        t_thread.daemon = True
+        t_thread.start()
+
+        def stop_fn():
+            log.debug('stop_fn called')
+            should_stop.set()
+            l_thread.join()
+            t_thread.join()
+
+        return stop_fn
 
 
 ##################################################
@@ -182,30 +215,25 @@ class SpeechRecognition:
 
 class TranscriptionActor(Actor):
     def __init__(self):
-        self.transcription_worker_is_running = Event()
-        self.should_stop = Event()
+        self.is_running = Event()
         self.tags = [START_TAG, END_TAG]
         self.speech_recognition = None  # set during initialization
-        self.executor = ThreadPoolExecutor(max_workers=5)
-        self.transcription_thread_future = None
 
         # set during set_config/start
         self.model_path = None
         self.model_size = None
         self.volume_threshold = None
-        self.stop_listening_fn = lambda x,y: None
+        self.stop_fn = lambda: None
 
     def receiveMessage(self, msg, sender):
         command = msg.get('command')
         edits = msg.get('edits')
-        tw_set = self.transcription_worker_is_running.is_set()
+        tw_set = self.is_running.is_set()
         log.debug(f'''
 %%%%%%%%%%
 ACTOR RECV: {msg["command"]}
 ACTOR STATE:
 transcription_worker is running={tw_set}
-should_stop: {self.should_stop.is_set()}
-transcription_thread_future: {self.transcription_thread_future}
 
 EDITS STATE:
 job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread else "NOT STARTED"}
@@ -264,43 +292,40 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
             # load the model into GPU
             self.speech_recognition.warmup()
 
+    def transcription_callback(self, edits, uri, text):
+        # Add space to respect next loop of transcription
+        log.debug(f'TRANSCRIBED: {text}')
+        job = BlockJob(
+            uri=uri,
+            start_tag=START_TAG,
+            end_tag=END_TAG,
+            text=f'\n{text}\n',
+            strict=False,
+        )
+        edits.add_job(NAME, job)
+
+    def finished_callback(self, edits, uri):
+        log.debug(f'FINISHED CALLBACK: {uri}')
+        cleanup_block(NAME, [START_TAG, END_TAG], uri, edits)
+
     def start(self, uri, cursor_pos, edits):
-        tw_set = self.transcription_worker_is_running.is_set()
-        if tw_set:
-            log.info(f'WARN: ON_START_BUT_RUNNING. '
-                     f'transcription_worker is running={tw_set}')
-            return
-        log.debug('ACTOR START')
-        self.should_stop.clear()
-
-        # Audio Listener
-        self.stop_listening_fn = self.speech_recognition.listen(self.should_stop)
-
-        # Transcriber
-        self.transcription_thread_future = self.executor.submit(
-            self.speech_recognition.transcription_worker,
-            uri, edits, self.should_stop, self.transcription_worker_is_running)
-
+        if self.is_running.is_set():
+            log.info('WARN: ON_START_BUT_RUNNING.')
+            return False
+        self.stop_fn = self.speech_recognition.go(
+            partial(self.transcription_callback, edits, uri),
+            partial(self.finished_callback, edits, uri))
+        self.is_running.set()
         log.debug('START CAN RETURN')
 
     def stop(self):
         log.debug('ACTOR STOP')
-        tw_set = self.transcription_worker_is_running.is_set()
-        if not tw_set:
-            log.info('WARN: ON_STOP_BUT_STOPPED'
-                     f'transcription_worker is running={tw_set}')
+        if not self.is_running.is_set():
+            log.info('WARN: ON_STOP_BUT_STOPPED')
             return False
-
-        self.should_stop.set()
-        self.stop_listening_fn(wait_for_stop=False)
-
-        if self.transcription_thread_future:
-            log.debug('Waiting for audio `transcription_thread_future` to terminate')
-            self.transcription_thread_future.result()  # block, wait to finish
-            self.transcription_thread_future = None  # reset
-
-        self.should_stop.clear()
-        self.stop_listening_fn = lambda x,y: None
+        self.stop_fn()
+        self.is_running.clear()
+        self.stop_fn = lambda: None
         log.debug('FINALLY STOPPED')
 
 
@@ -327,8 +352,6 @@ filter_list = [
 
 def filter_out(x: str) -> bool:
     x = filter_alphanum(x)
-    # if len(x) < 4:  # weed out short utterances
-    #     return True
     return x.strip().lower() in filter_list
 
 
