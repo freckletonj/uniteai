@@ -50,40 +50,48 @@ log = mk_logger(NAME, log_level)
 
 def listen(r: sr.Recognizer, source, external_queue=None):
     assert isinstance(source, sr.AudioSource), "Source must be an audio source"
-    assert source.stream is not None, "Audio source must be entered before listening, see documentation for ``AudioSource``; are you using ``source`` outside of a ``with`` statement?"
+    assert source.stream is not None, "AudioSource must be entered first"
 
     seconds_per_buffer = float(source.CHUNK) / source.SAMPLE_RATE
-    pause_buffer_count = int(math.ceil(r.pause_threshold / seconds_per_buffer))  # number of buffers of non-speaking audio during a phrase, before the phrase should be considered complete
-    phrase_buffer_count = int(math.ceil(r.phrase_threshold / seconds_per_buffer))  # minimum number of buffers of speaking audio before we consider the speaking audio a phrase
-    non_speaking_buffer_count = int(math.ceil(r.non_speaking_duration / seconds_per_buffer))  # maximum number of buffers of non-speaking audio to retain before and after a phrase
 
+    # number of buffers of non-speaking audio during a phrase, before the
+    # phrase should be considered complete
+    pause_buffer_count = int(math.ceil(r.pause_threshold / seconds_per_buffer))
+    # minimum number of buffers of speaking audio before we consider the
+    # speaking audio a phrase
+    phrase_buffer_count = int(
+        math.ceil(r.phrase_threshold / seconds_per_buffer))
+    # maximum number of buffers of non-speaking audio to retain before and
+    # after a phrase
+    non_speaking_buffer_count = int(
+        math.ceil(r.non_speaking_duration / seconds_per_buffer))
     # read audio input for phrases until there is a phrase that is long enough
-    elapsed_time = 0  # number of seconds of audio read
-    buffer = b""  # an empty buffer means that the stream has ended and there is no data left to read
+    # that the stream has ended and there is no data left to read
+    buffer = b""
     while True:
         frames = collections.deque()
 
         ##########
         # Wait for phrase start, store audio until then
         while True:
-            # handle waiting too long for phrase by raising an exception
-            elapsed_time += seconds_per_buffer
-
             buffer = source.stream.read(source.CHUNK)
             if len(buffer) == 0:
                 break  # reached end of the stream
             frames.append(buffer)
-            if len(frames) > non_speaking_buffer_count:  # ensure we only keep the needed amount of non-speaking buffers
+            # ensure we only keep the needed amount of non-speaking buffers
+            if len(frames) > non_speaking_buffer_count:
                 frames.popleft()
 
             # detect whether speaking has started on audio input
-            energy = audioop.rms(buffer, source.SAMPLE_WIDTH)  # energy of the audio signal
+            energy = audioop.rms(buffer, source.SAMPLE_WIDTH)
             if energy > r.energy_threshold:
                 break
 
-            # dynamically adjust the energy threshold using asymmetric weighted average
+            # dynamically adjust the energy threshold using asymmetric
+            # weighted average
             if r.dynamic_energy_threshold:
-                damping = r.dynamic_energy_adjustment_damping ** seconds_per_buffer  # account for different chunk sizes and rates
+                # account for different chunk sizes and rates
+                damping = r.dynamic_energy_adjustment_damping ** seconds_per_buffer
                 target_energy = energy * r.dynamic_energy_ratio
                 r.energy_threshold = r.energy_threshold * damping + target_energy * (1 - damping)
 
@@ -107,8 +115,9 @@ def listen(r: sr.Recognizer, source, external_queue=None):
                                 source.SAMPLE_WIDTH))
             phrase_count += 1
 
-            # check if speaking has stopped for longer than the pause threshold on the audio input
-            energy = audioop.rms(buffer, source.SAMPLE_WIDTH)  # unit energy of the audio signal within the buffer
+            # check if speaking has stopped for longer than the pause
+            # threshold on the audio input
+            energy = audioop.rms(buffer, source.SAMPLE_WIDTH)
             if energy > r.energy_threshold:
                 pause_count = 0
             else:
@@ -116,35 +125,46 @@ def listen(r: sr.Recognizer, source, external_queue=None):
             if pause_count > pause_buffer_count:  # end of the phrase
                 break
 
-        # check how long the detected phrase is, and retry listening if the phrase is too short
-        phrase_count -= pause_count  # exclude the buffers for the pause before the phrase
-        if phrase_count >= phrase_buffer_count or len(buffer) == 0: break  # phrase is long enough or we've reached the end of the stream, so stop listening
+        # check how long the detected phrase is, and retry listening if the
+        # phrase is too short
+        #
+        # exclude the buffers for the pause before the phrase
+        phrase_count -= pause_count
+        if phrase_count >= phrase_buffer_count or len(buffer) == 0:
+            # phrase is long enough or we've reached the end of the stream, so
+            # stop listening
+            break
 
 
-def listen_in_background(r: sr.Recognizer, source, callback, external_queue=None):
+def listen_in_background(r: sr.Recognizer,
+                         source,
+                         external_queue=None):
     assert isinstance(source, sr.AudioSource), "Source must be an audio source"
     running = [True]
 
     def threaded_listen():
         with source as s:
             while running[0]:
-                try:  # listen for 1 second, then check again if the stop function has been called
-                    audio = listen(r, s, external_queue)
-                except sr.exceptions.WaitTimeoutError:  # listening timed out, just try again
+                try:
+                    # listen for 1 second, then check again if the stop
+                    # function has been called
+                    listen(r, s, external_queue)
+                except sr.exceptions.WaitTimeoutError:
+                    # listening timed out, just try again
                     pass
-                else:
-                    if running[0]:
-                        callback(r, audio)
 
     def stopper(wait_for_stop=True):
         running[0] = False
         if wait_for_stop:
-            listener_thread.join()  # block until the background thread is done, which can take around 1 second
+            # block until the background thread is done, which can take around
+            # 1 second
+            listener_thread.join()
 
     listener_thread = threading.Thread(target=threaded_listen)
     listener_thread.daemon = True
     listener_thread.start()
     return stopper
+
 
 ##################################################
 # SpeechRecognition
@@ -205,7 +225,7 @@ class SpeechRecognition:
         # noise, and appropriate volume levels
         #
         logging.info('Adjusting thresholds for ambient noise')
-        with sr.Microphone() as source:
+        with self.mic as source:
             self.r.adjust_for_ambient_noise(source)
 
     def warmup(self):
@@ -216,15 +236,10 @@ class SpeechRecognition:
         warmup_thread.start()
 
     def listen(self, should_stop):
-        def callback(r, audio):
-            log.debug('LISTENING CALLBACK called')
-            # self.audio_queue.put(audio, block=False)
         stop_listening_fn = listen_in_background(
             self.r,
             self.mic,
-            callback,
             external_queue=self.audio_queue,
-            # phrase_time_limit=1.0
         )
         return stop_listening_fn
 
@@ -280,7 +295,8 @@ class SpeechRecognition:
                     uri=uri,
                     start_tag=START_TAG,
                     end_tag=END_TAG,
-                    text=f'\n{x}\n',
+                    # text=f'\n{x}\n',
+                    text=f'{x}',
                     strict=False,
                 )
                 edits.add_job(NAME, job)
