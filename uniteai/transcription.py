@@ -6,7 +6,6 @@ Speech-to-text
 '''
 
 from thespian.actors import Actor
-from typing import List
 from pygls.server import LanguageServer
 from lsprotocol.types import (
     CodeAction,
@@ -17,24 +16,18 @@ from lsprotocol.types import (
     TextDocumentIdentifier,
 )
 import logging
-from concurrent.futures import ThreadPoolExecutor
-from threading import Thread, Lock, Event
+from threading import Thread, Event
 from queue import Queue, Empty
 import speech_recognition as sr
 import re
 import numpy as np
 import time
-from dataclasses import dataclass
-from typing import List, Tuple
 import argparse
-
-from uniteai.common import ThreadSafeCounter, mk_logger, find_block, get_nested
-from uniteai.edit import BlockJob, cleanup_block, init_block
-import math
-import audioop
-import collections
 import threading
 from functools import partial
+
+from uniteai.common import mk_logger, find_block, get_nested
+from uniteai.edit import BlockJob, cleanup_block, init_block
 
 START_TAG = ':START_TRANSCRIPTION:'
 END_TAG = ':END_TRANSCRIPTION:'
@@ -100,14 +93,6 @@ class SpeechRecognition:
         # Get model into memory
         empty_audio = sr.AudioData(np.zeros(10), sample_rate=1, sample_width=1)
         self.recognize(empty_audio)
-
-        # # TODO: Transcription needs to be tuned better to deal with ambient
-        # # noise, and appropriate volume levels
-        # #
-        # log.info('Adjusting thresholds for ambient noise')
-        # with self.mic as source:
-        #     self.r.adjust_for_ambient_noise(source)
-
         log.info(f'Warmed up. sample_rate={self.sample_rate}, sample_width={self.sample_width}')
 
     def warmup(self):
@@ -131,12 +116,14 @@ class SpeechRecognition:
                        finished_callback,
                        should_stop):
         audios = []
-        # energy = audioop.rms(buffer, source.SAMPLE_WIDTH)
         while not should_stop.is_set():
             try:
                 # non-blocking, to more frequently allow the
                 # `stop_transcription` signal to end this thread.
                 buffer = audio_queue.get(False)
+
+                # TODO: can we more intelligently separate silence from speech?
+                # energy = audioop.rms(buffer, self.sample_width)
                 audios.append(buffer)
                 try:
                     while True:
@@ -175,7 +162,6 @@ class SpeechRecognition:
                     continue
 
                 x = x.strip()
-                log.debug(f'TRANSCRIPTION: {x}')
                 if filter_out(x):
                     continue
 
@@ -366,8 +352,6 @@ filter_list = [
 
 def filter_out(x: str) -> bool:
     x = filter_alphanum(x)
-    # if len(x) < 4:  # weed out short utterances
-    #     return True
     return x.strip().lower() in filter_list
 
 
