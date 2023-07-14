@@ -9,7 +9,7 @@ watch-tests:
 			pytest --capture=no; \
 		done
 
-upload:
+publish_pypi:
 	rm -r dist
 	python -m build
 	python -m twine upload dist/*
