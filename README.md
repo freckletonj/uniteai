@@ -54,31 +54,51 @@ This project hopes build **A Good Interface**.
 * **Conclusion:** *Let's get a local AI stack cozy inside a text editor.*
 
 
-## Quickstart, installing Everything on Ubuntu
+## Quickstart, installing Everything
 
 You can install more granularly than *everything*, but we'll demo *everything* first.
 
-The only platform-dependent dependency right now is `portaudio`, which I mention in the next section how to install for linux/mac.
-
-1.) Get: `uniteai_lsp`.
+1.) Make sure Python 3 + Pip is installed.
 
 ```sh
+python --version
+pip --version
+
+# or
+
+python3 --version
+pip3 --version
+```
+
+
+1.) The only platform-dependent dependency right now is `portaudio`, and that is only needed if you want speech-to-text/transcription.
+
+```sh
+# Mac
+brew install portaudio
+
+# Ubuntu/Debian
 sudo apt install portaudio19-dev
-pip install uniteai[all]
+```
+
+1.) Get: `uniteai_lsp`, build a config.
+
+```sh
+pip3 install "uniteai[all]"
 uniteai_lsp
 ```
 
 It will prompt if it should make a default `.uniteai.yml` config for you. Update your preferences, including your OpenAI API key if you want that, and which local language model or transcription models you want.
 
 
-2.) *Optional:* Then start the longlived LLM server which offers your editor a connection to your local large language model.
+1.) *Optional:* Then start the longlived LLM server which offers your editor a connection to your local large language model.
 
 ```sh
 uniteai_llm
 ```
 
 
-3.) Install in your editor:
+1.) Install in your editor:
 
 * For **VSCode** get the [`uniteai` extension](https://marketplace.visualstudio.com/publishers/uniteai). Eg in VSCode, `Ctrl-P` then `ext install uniteai.uniteai` .
 
@@ -119,19 +139,19 @@ sudo apt install portaudio19-dev  # needed by PyAudio
 # Mac
 brew install portaudio  # needed by PyAudio
 
-pip install uniteai[transcription]
+pip3 install "uniteai[transcription]"
 ```
 
 ### Local LLM dependencies
 
 ```sh
-pip install uniteai[local_llm]
+pip3 install "uniteai[local_llm]"
 ```
 
 ### OpenAI/ChatGPT dependencies
 
 ```sh
-pip install uniteai[openai]
+pip3 install "uniteai[openai]"
 ```
 
 ## Keycombos

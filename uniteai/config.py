@@ -33,7 +33,7 @@ CONFIG_PATHS = [
 def handle_missing_config():
     '''Possibly create a default config, and then exit.'''
     log.error('No config file found!')
-    ans = input('Would you like this process to copy the default `.uniteai.yml.example` config file into the current directory?')
+    ans = input('Would you like this process to copy the default `.uniteai.yml.example` config file into the current directory? (y)es / (n)o')
 
     if ans.lower() in ['y', 'yes']:
         log.info('''
@@ -62,18 +62,17 @@ def load_config(file_paths=CONFIG_PATHS):
             with open(file_path, 'r') as f:
                 return yaml.safe_load(f)
 
-    # Will exit after possibly copying a new config
-    if config_yaml is None:
-        handle_missing_config()
-
 def get_args():
     ''' This first pass will learn generic LSP-related config, and what further
     modules need to be loaded. Those modules will be able to specify their own
     configuration, which will be gathered in a second round of config parsing.
     '''
     # Load config file
-
     config_yaml = load_config(CONFIG_PATHS)
+
+    if config_yaml is None:
+        # Will exit after possibly copying a new config
+        handle_missing_config()
 
     # Parse command-line arguments
     parser = argparse.ArgumentParser()
