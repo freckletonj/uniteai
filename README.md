@@ -84,12 +84,13 @@ sudo apt install portaudio19-dev
 3.) Get: `uniteai_lsp`, build a config.
 
 ```sh
-pip3 install "uniteai[all]" # install deps for all features
-uniteai_lsp                 # on mac, this may only appear if you open a new terminal
-cat .uniteai.yml            # checkout the config
+pip3 install --user "uniteai[all]" # install deps for all features
+uniteai_lsp                        # on mac, this may only appear if you open a new terminal
+cat .uniteai.yml                   # checkout the config
 
-# if you want global config (unnecessary, but you probably do):
-mv .uniteai.yml
+# if you want global config (unnecessary, but you probably do,
+# otherwise it just searches your current dir):
+mv .uniteai.yml ~/
 ```
 
 It will prompt if it should make a default `.uniteai.yml` config for you. Update your preferences, including your OpenAI API key if you want that, and which local language model or transcription models you want.
