@@ -19,6 +19,7 @@ import sys
 import shutil
 import logging
 from uniteai.common import mk_logger
+import pkg_resources
 
 log = mk_logger('CONFIG', logging.WARN)
 
@@ -45,7 +46,7 @@ It requires secrets (eg OpenAI Key) so you may prefer to locate it at `~/.unitea
         config_path = '.uniteai.yml'
 
         # Example path
-        example_config_path = '.uniteai.yml.example'
+        example_config_path = pkg_resources.resource_filename('uniteai', '.uniteai.yml.example')
 
         if not os.path.exists(config_path):
             shutil.copyfile(example_config_path, config_path)
