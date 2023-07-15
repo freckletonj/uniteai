@@ -65,7 +65,7 @@ include = [
 ]
 
 [tool.hatch.build.targets.wheel.force-include]
-"config.yml.example" = "config.yml.example"
+".uniteai.yml.example" = ".uniteai.yml.example"
 
 [project.scripts]
 uniteai_lsp = "uniteai.lsp_server:main"

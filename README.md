@@ -84,9 +84,9 @@ sudo apt install portaudio19-dev
 1.) Get: `uniteai_lsp`, build a config.
 
 ```sh
-pip3 install "uniteai[all]"
-uniteai_lsp
-cat .uniteai.yml
+pip3 install "uniteai[all]" # install deps for all features
+uniteai_lsp                 # on mac, this may only appear if you open a new terminal
+cat .uniteai.yml            # checkout the config
 
 # if you want global config (unnecessary, but you probably do):
 mv .uniteai.yml
