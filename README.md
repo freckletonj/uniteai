@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-<em>UniteAI: Voice-to-text, Local LLM, and GPT, right in your editor.</em>
+<em>Your AI Stack in your Editor: Voice-to-text, Local LLM, and GPT, +more.</em>
 </p>
 
 ---
@@ -71,7 +71,7 @@ pip3 --version
 ```
 
 
-1.) The only platform-dependent dependency right now is `portaudio`, and that is only needed if you want speech-to-text/transcription.
+2.) The only platform-dependent dependency right now is `portaudio`, and that is only needed if you want speech-to-text/transcription.
 
 ```sh
 # Mac
@@ -81,7 +81,7 @@ brew install portaudio
 sudo apt install portaudio19-dev
 ```
 
-1.) Get: `uniteai_lsp`, build a config.
+3.) Get: `uniteai_lsp`, build a config.
 
 ```sh
 pip3 install "uniteai[all]" # install deps for all features
@@ -95,14 +95,14 @@ mv .uniteai.yml
 It will prompt if it should make a default `.uniteai.yml` config for you. Update your preferences, including your OpenAI API key if you want that, and which local language model or transcription models you want.
 
 
-1.) *Optional:* Then start the longlived LLM server which offers your editor a connection to your local large language model.
+4.) *Optional:* Then start the longlived LLM server which offers your editor a connection to your local large language model.
 
 ```sh
 uniteai_llm
 ```
 
 
-1.) Install in your editor:
+5.) Install in your editor:
 
 * For **VSCode** get the [`uniteai` extension](https://marketplace.visualstudio.com/publishers/uniteai). Eg in VSCode, `Ctrl-P` then `ext install uniteai.uniteai` .
 
@@ -128,11 +128,13 @@ uniteai_llm
 
 ## Granular installs
 
+If you did `pip install "uniteai[all]"`, ignore this section!
+
 Still refer to the Quickstart section for the main workflow, such as calling `uniteai_lsp` to get your default config made.
 
 Your config determines what modules/features are loaded.
 
-The following makes sure to get your dependencies for each feature.
+The following makes sure to get your dependencies for each feature. This will become more relevant when more community features are added.
 
 ### Transcription dependencies
 
