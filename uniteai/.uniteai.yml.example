@@ -51,7 +51,7 @@ transcription:
   # Whisper
   model_type: 'whisper'
   model_size: 'base'  # tiny, base, small, medium, large-v2
-  model_path: '/home/me/path/to/whisper-base'
+  # model_path: '/home/me/path/to/whisper-base'  # if you don't provide, it will be downloaded
 
 
 ##########

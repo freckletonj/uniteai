@@ -35,7 +35,7 @@ NAME = 'transcription'
 
 # A custom logger for just this feature. You can tune the log level to turn
 # on/off just this feature's logs.
-log_level = logging.DEBUG
+log_level = logging.WARN
 log = mk_logger(NAME, log_level)
 
 
