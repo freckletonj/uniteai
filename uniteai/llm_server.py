@@ -55,6 +55,8 @@ from uniteai.config import load_config
 import uvicorn
 
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
 ##################################################
 # `transformers`
 
@@ -140,9 +142,9 @@ def local_llm_stream_(request, streamer, local_llm_stop_event):
         custom_stopping_criteria(local_llm_stop_event)
     ])
 
-    toks = tokenizer([request.text], return_tensors='pt').to('cuda')
+    toks = tokenizer([request.text], return_tensors='pt').to(device)
     generation_kwargs = dict(
-        inputs=toks.input_ids.cuda(),
+        inputs=toks.input_ids.to(device),
         attention_mask=toks.attention_mask,
         streamer=streamer,
         max_length=request.max_length,

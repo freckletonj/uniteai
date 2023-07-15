@@ -25,9 +25,12 @@ import time
 import argparse
 import threading
 from functools import partial
+import torch
 
 from uniteai.common import mk_logger, find_block, get_nested
 from uniteai.edit import BlockJob, cleanup_block, init_block
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 START_TAG = ':START_TRANSCRIPTION:'
 END_TAG = ':END_TRANSCRIPTION:'
@@ -69,7 +72,7 @@ class SpeechRecognition:
             return self.r.recognize_whisper(
                 audio,
                 load_options=dict(
-                    device='cuda:0',
+                    device=device,
                     download_root=self.model_path
                 ), language='en')
 
@@ -78,7 +81,7 @@ class SpeechRecognition:
                 audio,
                 model=self.model_size,
                 load_options=dict(
-                    device='cuda:0',
+                    device=device,
                     download_root=self.model_path
                 ), language='english')
 

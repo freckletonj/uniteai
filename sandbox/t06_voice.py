@@ -23,6 +23,9 @@ from threading import Thread
 from queue import Queue
 import os
 import re
+import torch
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 MODEL_PATH = '/home/josh/_/models/whisper-large-v2'
 MODEL_SIZE = 'small' # tiny, base, small, medium, large-v2
@@ -85,7 +88,7 @@ def recognize_worker():
             x = r.recognize_whisper(audio,
                                     model=MODEL_SIZE,
                                     load_options=dict(
-                                        device='cuda:0',
+                                        device=device,
                                         download_root=MODEL_PATH,
                                     ),
                                     language='english').strip()
