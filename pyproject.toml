@@ -40,6 +40,10 @@ transcription = [
   "openai-whisper",
   "soundfile",
 ]
+speech_to_text = [
+  "TTS",
+  "sounddevice",
+]
 all = [
   "accelerate",
   "bitsandbytes",
