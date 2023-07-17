@@ -7,6 +7,7 @@ modules:
   - uniteai.transcription
   - uniteai.openai
   - uniteai.contrib.example
+  # - uniteai.contrib.text_to_speech
 
 
 ##########

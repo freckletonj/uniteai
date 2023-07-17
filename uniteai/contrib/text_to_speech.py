@@ -7,31 +7,27 @@ python -m spacy download en_core_web_sm
 
 '''
 
+import re
 import os
-os.environ["SUNO_USE_SMALL_MODELS"] = "True"  # must be before `import bark`
-
 from lsprotocol.types import (
     CodeAction,
     CodeActionKind,
     CodeActionParams,
     Command,
-    Position,
     Range,
     TextDocumentIdentifier,
     WorkspaceEdit,
 )
-from concurrent.futures import ThreadPoolExecutor
 from threading import Event, Thread
 from thespian.actors import Actor
 import argparse
 import logging
-import time
 import importlib
 
-from uniteai.common import extract_range, find_block, mk_logger, get_nested
-from uniteai.edit import init_block, cleanup_block, BlockJob
-from uniteai.common import find_block, mk_logger, get_nested
+from uniteai.common import extract_range, mk_logger
 from uniteai.server import Server
+
+os.environ["SUNO_USE_SMALL_MODELS"] = "True"  # must do before `import bark`
 
 
 # Temperatures
@@ -39,7 +35,6 @@ from uniteai.server import Server
 #   0.0 = more conservative
 TEXT_TEMP = 0.6
 WAVEFORM_TEMP = 0.8
-
 
 # START_TAG = ':START_DOCUMENT_CHAT:'
 # END_TAG = ':END_DOCUMENT_CHAT:'
@@ -49,14 +44,14 @@ NAME = 'text_to_speech'
 # on/off just this feature's logs.
 log = mk_logger(NAME, logging.DEBUG)
 
-import re
-
 
 def prep_prompts(text, desired_length=200, max_length=300):
-    """Split text it into chunks of a desired length trying to keep sentences intact.
+    """Split text it into chunks of a desired length trying to keep sentences
+    intact.
 
     From tortoise-tts"""
-    # normalize text, remove redundant whitespace and convert non-ascii quotes to ascii
+    # normalize text, remove redundant whitespace and convert non-ascii quotes
+    # to ascii
     text = re.sub(r'\n\n+', '\n', text)
     text = re.sub(r'\s+', ' ', text)
     text = re.sub(r'[“”]', '"', text)
@@ -97,17 +92,20 @@ def prep_prompts(text, desired_length=200, max_length=300):
         # do we need to force a split?
         if len(current) >= max_length:
             if len(split_pos) > 0 and len(current) > (desired_length / 2):
-                # we have at least one sentence and we are over half the desired length, seek back to the last split
+                # we have at least one sentence and we are over half the
+                # desired length, seek back to the last split
                 d = pos - split_pos[-1]
                 seek(-d)
             else:
-                # no full sentences, seek back until we are not in the middle of a word and split there
+                # no full sentences, seek back until we are not in the middle
+                # of a word and split there
                 while c not in '!?.\n ' and pos > 0 and len(current) > desired_length:
                     c = seek(-1)
             commit()
         # check for sentence boundaries
         elif not in_quote and (c in '!?\n' or (c == '.' and peek(1) in '\n ')):
-            # seek forward if we have consecutive boundary markers but still within the max length
+            # seek forward if we have consecutive boundary markers but still
+            # within the max length
             while pos < len(text) - 1 and len(current) < max_length and peek(1) in '!?.':
                 c = seek(1)
             split_pos.append(pos)
@@ -181,15 +179,16 @@ locked: {self.should_stop.is_set()}
 
     def _warmup(self):
         ''' Warm up, intended for a separate thread. '''
-        global nltk
+        # global nltk
         global bark
         global sounddevice
-        # Ensure that the necessary tokenizers are downloaded
-        # download and load all models
-        nltk = importlib.import_module('nltk')  # loads slowly
-        bark = importlib.import_module('bark')# import SAMPLE_RATE, generate_audio, preload_models
-        sounddevice = importlib.import_module('sounddevice') #as sd
-        nltk.download('punkt')
+
+        # nltk = importlib.import_module('nltk')  # loads slowly
+        # nltk.download('punkt')
+
+        bark = importlib.import_module('bark')
+        sounddevice = importlib.import_module('sounddevice')
+
         bark.preload_models()
         log.info('Warmed up.')
 
@@ -280,20 +279,12 @@ def code_action_text_to_speech_play(params: CodeActionParams):
 ##################################################
 # Setup
 #
-# NOTE: In `.uniteai.yml`, just add `uniteai.text_to_speech` under `modules`, and this
-#       will automatically get built into the server at runtime.
+# NOTE: In `.uniteai.yml`, just add `uniteai.text_to_speech` under `modules`,
+#       and this will automatically get built into the server at runtime.
 #
 
 def configure(config_yaml):
     parser = argparse.ArgumentParser()
-    # parser.add_argument('--text_to_speech_start_digit', default=get_nested(config_yaml, ['text_to_speech', 'start_digit']))
-    # parser.add_argument('--text_to_speech_end_digit', default=get_nested(config_yaml, ['text_to_speech', 'end_digit']))
-    # parser.add_argument('--text_to_speech_delay', default=get_nested(config_yaml, ['text_to_speech', 'delay']))
-
-    # These get picked up as `config` in `initialize`
-
-    # bc this is only concerned with text_to_speech params, do not error if extra
-    # params are sent via cli.
     args, _ = parser.parse_known_args()
     return args
 
