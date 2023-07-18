@@ -25,7 +25,7 @@ PERCENTILE = 80
 
 pdf_paths = {
     'bitcoin': '~/Documents/misc/bitcoin.pdf',
-    # 'idaho': '~/Documents/misc/land use and development code.pdf'
+    'idaho': '~/Documents/misc/land use and development code.pdf'
 }
 
 
@@ -67,9 +67,11 @@ except:
 query_instruction = 'Represent the Science question for retrieving supporting documents: '
 embed_instruction = 'Represent the Science document for retrieval: '
 
+
 def embed(xs: List[str]):
     ''' Build sentence embeddings for each sentence in `xs` '''
     return model.encode(xs)
+
 
 def similar_tokens(query: str,
                    pdf_key: str,
@@ -92,7 +94,9 @@ def similar_tokens(query: str,
         embeddings = []
 
     # Loop through the document with given stride
-    for emb_i, doc_i in tqdm(enumerate(range(0, len(document) - WINDOW_SIZE + 1, STRIDE))):
+    #   listify offsets to help out tqdm
+    offsets = list(enumerate(range(0, len(document) - WINDOW_SIZE + 1, STRIDE)))
+    for emb_i, doc_i in tqdm(offsets):
         # Extract the chunk from document
         chunk = document[doc_i:doc_i+WINDOW_SIZE]
 
@@ -115,7 +119,9 @@ def similar_tokens(query: str,
 
     return similarities
 
+
 def find_spans(arr, threshold=0.5):
+    ''' '''
     # Create an array that is 1 where arr is above threshold, and padded with 0s at the edges
     is_over_threshold = np.concatenate(([0], np.greater(arr, threshold), [0]))
 
@@ -125,6 +131,7 @@ def find_spans(arr, threshold=0.5):
     ends = np.where(diffs < 0)[0]
     return list(zip(starts, ends - 1))
 
+
 def tune_percentile(xs, percentile):
     ''' 0-out all elements below percentile. Essentially, this will leave some
     `1-percentile` percentage of the document highlighted. '''
@@ -132,6 +139,7 @@ def tune_percentile(xs, percentile):
     p = np.percentile(xs, percentile)
     xs[xs < p] *= 0
     return xs
+
 
 def find_similar(query, pdf_key):
     '''
@@ -143,6 +151,7 @@ def find_similar(query, pdf_key):
     # Embeddings
     print('Calculating embeddings')
     return similar_tokens(query, pdf_key)
+
 
 def segments(similarities, document, threshold=0.0):
     out = ''
@@ -169,7 +178,9 @@ def segments(similarities, document, threshold=0.0):
 
     return out
 
+
 def rank(segments, rank_fn):
+    '''Sort segments according to an aggregate function of their scores.'''
     scores = []
     for text, sims in segments:
         scores.append(rank_fn(sims))
@@ -177,6 +188,13 @@ def rank(segments, rank_fn):
     for score, (text, sims) in sorted(zip(scores, segments)):
         out.append(text)
     return out
+
+
+def denoise_similarities(similarities, window_size=2000, poly_order=2):
+    ''' Apply Savitzky-Golay filter to smooth out the similarity scores. '''
+    denoised_scores = savgol_filter(similarities, window_size, poly_order)
+    return denoised_scores
+
 
 # query = 'whats in it for participants to the blockchain?'
 # query = 'how does this protect my anonymity?'
@@ -189,13 +207,6 @@ similarities = find_similar(query, pdf_key)
 # remove outlier
 last_edge = int(len(similarities) * 0.02)
 similarities[-last_edge:] = similarities[-last_edge]
-
-
-def denoise_similarities(similarities, window_size=2000, poly_order=2):
-    # Apply Savitzky-Golay filter to smooth out the scores
-    denoised_scores = savgol_filter(similarities, window_size, poly_order)
-    return denoised_scores
-
 
 # Denoise salience scores
 d_similarities = denoise_similarities(similarities)
