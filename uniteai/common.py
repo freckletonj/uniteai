@@ -105,20 +105,20 @@ def find_block(start_tag, end_tag, doc):
     return s, e
 
 
-def find_pattern_in_document(
-        document: str,
-        pattern: str) -> List[Tuple[int, int, int]]:
-    '''Return (line, start_col, end_col) for each match. Regex cannot span
-    newlines.'''
-    result = []
-    compiled_pattern = re.compile(pattern)
-
-    for line_number, line in enumerate(document.split('\n')):
-        for match in compiled_pattern.finditer(line):
-            start, end = match.span()
-            result.append((line_number, start, end))
-
-    return result
+def extract_block(start, end, doc):
+    '''Extract block of text between `start` and `end` tag.'''
+    doc_lines = doc.split('\n')
+    if start is None or end is None:
+        return None
+    if start[0] > end[0] or (start[0] == end[0] and start[2] > end[1]):
+        return None
+    if start[0] == end[0]:
+        return [doc_lines[start[0]][start[2]: end[1]]]
+    else:
+        block = [doc_lines[start[0]][start[2]:]]  # portion of start line
+        block.extend(doc_lines[start[0]+1:end[0]])  # all of middle lines
+        block.append(doc_lines[end[0]][:end[1]])  # portion of end line
+        return '\n'.join(block)
 
 
 ##################################################
