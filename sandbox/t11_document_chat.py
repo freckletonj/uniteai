@@ -30,52 +30,24 @@ pdf_paths = {
 }
 
 
-##################################################
-# PDF
-
-def read_pdf(path):
-    path = os.path.expanduser(path)
-    reader = PdfReader(path)
-    text = ''
-    for page in reader.pages:
-        text += '\n' + page.extract_text()
-    return text
-
-def get_file_name(path):
-    full_name = os.path.basename(path)
-    name, ext = os.path.splitext(full_name)
-    return name
-
-def load_pkl(pdf_key):
-    path = f'{pdf_key}.pkl'
-    if os.path.exists(path):
-        with open(path, 'rb') as f:
-            xs = pickle.load(f)
-        return xs
-    return None
-
-def save_pkl(pdf_key, xs):
-    with open(f'{pdf_key}.pkl', 'wb') as f:
-        pickle.dump(xs, f)
-    print(f'Saved: {pdf_key}')
-
-try:
-    pdf_cache
-except:
-    pdf_cache = {}
-
-    print('Loading PDF Text')
-    for k, path in pdf_paths.items():
-        pdf_cache[k] = read_pdf(path)
-
-try:
-    embedding_cache
-except:
-    embedding_cache = {}
-    for k in pdf_paths.keys():
-        emb = load_pkl(k)
-        if emb is not None:
-            embedding_cache[k] = emb
+# cache = [
+#     {
+#         'bitcoin': '~/Documents/misc/bitcoin.pdf',
+#         'window_size': 300,
+#         'stride': 100,
+#         'percentile': 80,
+#         'pdf_text': None,
+#         'embedding': None,
+#     },
+#     {
+#         'idaho': '~/Documents/misc/land use and development code.pdf',
+#         'window_size': 300,
+#         'stride': 100,
+#         'percentile': 80,
+#         'pdf_text': None,
+#         'embedding': None,
+#     }
+# ]
 
 
 ##################################################
@@ -96,39 +68,78 @@ def embed(xs: List[str]):
     return model.encode(xs)
 
 
-def similar_tokens(query: str,
-                   pdf_key: str,
-                   ) -> List[float]:
-    '''Compare a `query to a strided window over a `document`.'''
-    global embedding_cache
-    # Initialize a numpy array for storing similarities and overlaps
-    document = pdf_cache[pdf_key]
+##################################################
+# PDF
 
-    similarities = np.zeros(len(document), dtype=float)
-    overlaps = np.zeros(len(document), dtype=float)
+def read_pdf(path):
+    path = os.path.expanduser(path)
+    reader = PdfReader(path)
+    text = ''
+    for page in reader.pages:
+        text += '\n' + page.extract_text()
+    return text
+
+
+def get_file_name(path):
+    full_name = os.path.basename(path)
+    name, ext = os.path.splitext(full_name)
+    return name
+
+
+def load_pkl(pdf_key):
+    path = f'{pdf_key}.pkl'
+    if os.path.exists(path):
+        with open(path, 'rb') as f:
+            xs = pickle.load(f)
+        return xs
+    return None
+
+
+def save_pkl(pdf_key, xs):
+    path = f'{pdf_key}.pkl'
+    with open(path, 'wb') as f:
+        pickle.dump(xs, f)
+    print(f'Saved: {path}')
+
+
+def embed_documents(pdf_cache):
+    print('Preparing Embeddings')
+    embedding_cache = {}
+    for pdf_key, document in pdf_cache.items():
+        # Try to load embeddings from disk
+        embeddings = load_pkl(pdf_key)
+        if embeddings is not None:
+            print(f'Loaded {pdf_key} embeddings')
+            embedding_cache[pdf_key] = embeddings
+        else:  # If not found, then calculate
+            print(f'Preparing embeddings for {pdf_key}')
+            embeddings = []
+            # Loop through the document with given stride
+            offsets = list(enumerate(range(0, len(document) - WINDOW_SIZE + 1, STRIDE)))
+            for emb_i, doc_i in tqdm(offsets):
+                # Extract the chunk from document
+                chunk = document[doc_i:doc_i+WINDOW_SIZE]
+                # Embed the chunk
+                chunk_e = embed([[embed_instruction, chunk]])
+                embeddings.append(chunk_e)
+
+            embedding_cache[pdf_key] = embeddings
+            save_pkl(pdf_key, embeddings)
+    return embedding_cache
+
+
+def similar_tokens(query: str, embeddings: List[np.ndarray]) -> List[float]:
+    '''Compare a `query` to a strided window over a `document`.'''
+    # Initialize a numpy array for storing similarities and overlaps
+    document_length = len(embeddings) * STRIDE + WINDOW_SIZE - 1  # Derive the document length from embeddings
+    similarities = np.zeros(document_length, dtype=float)
+    overlaps = np.zeros(document_length, dtype=float)
 
     query_e = embed([[query_instruction, query]])
 
-    if pdf_key in embedding_cache:
-        embedding_is_saved = True
-        embeddings = embedding_cache[pdf_key]
-    else:
-        embedding_is_saved = False
-        embeddings = []
-
     # Loop through the document with given stride
-    #   listify offsets to help out tqdm
-    offsets = list(enumerate(range(0, len(document) - WINDOW_SIZE + 1, STRIDE)))
-    for emb_i, doc_i in tqdm(offsets):
-        # Extract the chunk from document
-        chunk = document[doc_i:doc_i+WINDOW_SIZE]
-
-        # Similarity
-        if embedding_is_saved:
-            chunk_e = embeddings[emb_i]
-        else:
-            chunk_e = embed([[embed_instruction, chunk]])
-            embeddings.append(chunk_e)
+    offsets = list(range(0, document_length - WINDOW_SIZE + 1, STRIDE))
+    for chunk_e, doc_i in tqdm(zip(embeddings, offsets)):
         sim = cosine_similarity(query_e, chunk_e)[0][0]
 
         # Update the similarities and overlaps array
@@ -136,15 +147,23 @@ def similar_tokens(query: str,
             similarities[j] += sim
             overlaps[j] += 1
 
-    if not embedding_is_saved:
-        embedding_cache[pdf_key] = embeddings
-        save_pkl(pdf_key, embeddings)
-
     # Average the similarities with the number of overlaps
     similarities /= np.where(overlaps != 0, overlaps, 1)
-
     return similarities
 
+try:
+    pdf_cache
+except:
+    pdf_cache = {}
+
+    print('Loading PDF Text')
+    for k, path in pdf_paths.items():
+        pdf_cache[k] = read_pdf(path)
+
+try:
+    embedding_cache
+except:
+    embedding_cache = embed_documents(pdf_cache)
 
 def find_spans(arr, threshold=0.5):
     ''' '''
@@ -172,11 +191,8 @@ def find_similar(query, pdf_key):
     query: a query that you want to find similar passages to
     pdf_key: {bitcoin, idaho}
     '''
-    global embedding_cache
-
-    # Embeddings
-    print('Calculating embeddings')
-    return similar_tokens(query, pdf_key)
+    embeddings = embedding_cache[pdf_key]
+    return similar_tokens(query, embeddings)
 
 
 def segments(similarities, document, threshold=0.0):
@@ -242,7 +258,7 @@ d_similarities /= d_similarities.max()
 d_similarities = tune_percentile(d_similarities, percentile=75)
 
 segs = segments(d_similarities, document)
-ranked_segments = rank(segs, np.max)
+ranked_segments = rank(segs, np.max)[-3:]
 
 import matplotlib.pyplot as plt
 plt.plot(similarities)
