@@ -18,6 +18,7 @@ from typing import List, Dict
 import numpy as np
 from tqdm import tqdm
 from scipy.signal import savgol_filter
+import pickle
 
 WINDOW_SIZE = 300
 STRIDE = 100
@@ -40,6 +41,24 @@ def read_pdf(path):
         text += '\n' + page.extract_text()
     return text
 
+def get_file_name(path):
+    full_name = os.path.basename(path)
+    name, ext = os.path.splitext(full_name)
+    return name
+
+def load_pkl(pdf_key):
+    path = f'{pdf_key}.pkl'
+    if os.path.exists(path):
+        with open(path, 'rb') as f:
+            xs = pickle.load(f)
+        return xs
+    return None
+
+def save_pkl(pdf_key, xs):
+    with open(f'{pdf_key}.pkl', 'wb') as f:
+        pickle.dump(xs, f)
+    print(f'Saved: {pdf_key}')
+
 try:
     pdf_cache
 except:
@@ -53,6 +72,10 @@ try:
     embedding_cache
 except:
     embedding_cache = {}
+    for k in pdf_paths.keys():
+        emb = load_pkl(k)
+        if emb is not None:
+            embedding_cache[k] = emb
 
 
 ##################################################
@@ -113,7 +136,10 @@ def similar_tokens(query: str,
             similarities[j] += sim
             overlaps[j] += 1
 
-    embedding_cache[pdf_key] = embeddings
+    if not embedding_is_saved:
+        embedding_cache[pdf_key] = embeddings
+        save_pkl(pdf_key, embeddings)
+
     # Average the similarities with the number of overlaps
     similarities /= np.where(overlaps != 0, overlaps, 1)
 
@@ -192,20 +218,21 @@ def rank(segments, rank_fn):
 
 def denoise_similarities(similarities, window_size=2000, poly_order=2):
     ''' Apply Savitzky-Golay filter to smooth out the similarity scores. '''
-    denoised_scores = savgol_filter(similarities, window_size, poly_order)
-    return denoised_scores
+    return savgol_filter(similarities, window_size, poly_order)
 
 
 # query = 'whats in it for participants to the blockchain?'
 # query = 'how does this protect my anonymity?'
 # query = 'im concerned my hdd isnt big enough'
-query = 'who contributed to this paper?'
-pdf_key = 'bitcoin'
+# query = 'who contributed to this paper?'
+
+query = 'how close can my silver mine be to a farm?'
+pdf_key = 'idaho'
 document = pdf_cache[pdf_key]
 similarities = find_similar(query, pdf_key)
 
-# remove outlier
-last_edge = int(len(similarities) * 0.02)
+# remove outlier at end
+last_edge = int(len(similarities) * 0.01)
 similarities[-last_edge:] = similarities[-last_edge]
 
 # Denoise salience scores
@@ -215,12 +242,11 @@ d_similarities /= d_similarities.max()
 d_similarities = tune_percentile(d_similarities, percentile=75)
 
 segs = segments(d_similarities, document)
-ranked_segments = rank(segs, np.mean)
+ranked_segments = rank(segs, np.max)
 
 import matplotlib.pyplot as plt
 plt.plot(similarities)
 plt.plot(d_similarities)
-# plt.plot(tune_percentile(similarities))
 plt.show()
 
 for x in ranked_segments:
