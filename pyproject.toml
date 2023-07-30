@@ -44,6 +44,13 @@ speech_to_text = [
   "TTS",
   "sounddevice",
 ]
+document_chat = [
+  "GitPython",
+  "nbformat",
+  "youtube-transcript-api",
+  "InstructorEmbedding",
+  "sentence-transformers",
+]
 all = [
   "accelerate",
   "bitsandbytes",

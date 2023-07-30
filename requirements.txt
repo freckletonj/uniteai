@@ -26,6 +26,8 @@ soundfile
 
 
 # document_chat
-GitPython==3.1
-nbformat
-youtube-transcript-api
+GitPython==3.1         # downloading repos
+nbformat               # ipynb files
+youtube-transcript-api # yt transcripts
+InstructorEmbedding    # sentence embeddings
+sentence-transformers  # sentence embeddings
