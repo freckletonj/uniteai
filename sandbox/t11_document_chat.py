@@ -405,11 +405,13 @@ except:
         load_embeddings(m)
     cache_is_loaded = True
 
-# # doc_name = 'bitcoin'
-# # query = 'whats in it for participants to the blockchain?'
-# # query = 'how does this protect my anonymity?'
-# # query = 'im concerned my hdd isnt big enough'
-# # query = 'who contributed to this paper?'
+doc_name = 'bitcoin'
+# query = 'whats in it for participants to the blockchain?'
+# query = 'how does this protect my anonymity?'
+# query = 'im concerned my hdd isnt big enough'
+# query = 'who contributed to this paper?'
+# query = 'what is the transaction size limit?'
+query = 'what game theory problem is it trying to solve?'
 
 # doc_name = 'idaho'
 # # query = 'how close can my silver mine be to a farm?'
@@ -418,24 +420,24 @@ except:
 # # query = 'What signs can I put on my property?'
 # query = 'How does this document define "sign"?'
 
-# ranked_segments, sims = top_segments(query, doc_name, top_n=3)
+ranked_segments, sims = top_segments(query, doc_name, top_n=3, visualize=True)
 
-# for x in reversed(ranked_segments):
-#     print('\n\nXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n\n')
-#     print(x)
+for x in reversed(ranked_segments):
+    print('\n\nXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n\n')
+    print(x)
 
 
-##################################################
-# Colorize document
+# ##################################################
+# # Colorize document
 
-doc_name = '2001_positive'
-queries = [
-    ('The reviewer loves the book.', '00cc00'),
-    ('The reviewer hates the book.', 'cc0000'),
-]
-query_tups = []
-for (q, c) in queries:
-    _, sims = top_segments(q, doc_name, top_n=0)
-    query_tups.append((q, c, sims))
+# doc_name = '2001_positive'
+# queries = [
+#     ('The reviewer loves the book.', '00cc00'),
+#     ('The reviewer hates the book.', 'cc0000'),
+# ]
+# query_tups = []
+# for (q, c) in queries:
+#     _, sims = top_segments(q, doc_name, top_n=0)
+#     query_tups.append((q, c, sims))
 
-create_colorful_html(query_tups, cache[doc_name].text)
+# create_colorful_html(query_tups, cache[doc_name].text)
