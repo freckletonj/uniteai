@@ -1,5 +1,7 @@
 '''
 
+TODO: As of now, this is little more than a copy-pasted example bot.
+
 A Language-model-based State Machine
 
 State + Action -> State' + Response
