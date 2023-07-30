@@ -23,3 +23,9 @@ PyAudio
 SpeechRecognition
 openai-whisper
 soundfile
+
+
+# document_chat
+GitPython==3.1
+nbformat
+youtube-transcript-api
