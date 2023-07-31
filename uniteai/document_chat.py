@@ -27,6 +27,8 @@ import time
 from uniteai.edit import init_block, cleanup_block, BlockJob
 from uniteai.common import find_block, mk_logger, get_nested
 from uniteai.server import Server
+from uniteai.document_chat import embed
+from uniteai.document_chat import download
 
 
 START_TAG = ':START_DOCUMENT_CHAT:'

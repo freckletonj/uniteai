@@ -21,3 +21,6 @@ test.txt
 *.log
 debug_transcription.wav
 t12_outputs
+download_cache/
+embedding_cache/
+db.sqlite3

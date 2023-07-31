@@ -166,6 +166,8 @@ def read_unicode(file_path, buf=None):
       file_path: a path to a file to read
       buf: if the file has already been read into an IO buffer, we can use it
     '''
+    file_path = Path(file_path)
+
     if buf is None:
         with open(file_path, 'rb') as fp:
             buf = BytesIO(fp.read())
@@ -173,18 +175,17 @@ def read_unicode(file_path, buf=None):
     file_content = buf.getvalue()
     if file_path.suffix == '.pdf':
         pdf = PdfReader(BytesIO(file_content))
-        return (file_path, '\n'.join(page.extract_text() for page in pdf.pages))
+        return '\n'.join(page.extract_text() for page in pdf.pages)
     elif file_path.suffix == '.html':
         soup = BeautifulSoup(file_content, "html.parser")
-        return (file_path, soup.get_text())
+        return soup.get_text()
     elif file_path.suffix == '.txt' or file_path.suffix == '.json':
-        return (file_path, file_content.decode('utf-8'))
+        return file_content.decode('utf-8')
     elif file_path.suffix == '.txt' or file_path.suffix == '.ipynb':
         py = convert_ipynb_to_py(buf)
-        return (file_path, py)
+        return py
     else:
-        return (file_path, file_content.decode('utf-8', errors='ignore'))
-
+        return file_content.decode('utf-8', errors='ignore')
 
 
 ##################################################
