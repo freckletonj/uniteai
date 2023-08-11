@@ -21,7 +21,8 @@ import nbformat
 from youtube_transcript_api import YouTubeTranscriptApi
 from uniteai.common import read_unicode
 import requests
-
+from uniteai.common import mk_logger
+import logging
 
 FILETYPES = [
     '.pdf',
@@ -34,23 +35,41 @@ FILETYPES = [
 ]
 
 
+log = mk_logger('document-download', logging.DEBUG)
+
+
 ##################################################
 # Youtube
 
 def extract_video_id(url):
     regex_patterns = [
-        r"youtube\.com/watch\?v=(\w+)",  # Standard URL
-        r"youtu\.be/(\w+)",              # Shortened URL
-        r"youtube\.com/embed/(\w+)",     # Embed URL
-        r"youtube\.com/v/(\w+)",         # V URL
+        r"youtube\.com/watch\?v=([a-zA-Z0-9_-]{11})",      # Standard URL
+        r"youtu\.be/([a-zA-Z0-9_-]{11})",                  # Shortened URL
+        r"youtube\.com/embed/([a-zA-Z0-9_-]{11})",         # Embed URL
+        r"youtube\.com/v/([a-zA-Z0-9_-]{11})",             # V URL
         # URL with timestamp
-        r"youtube\.com/watch\?v=(\w+)&.*#t=(\d+)m(\d+)s",
+        r"youtube\.com/watch\?v=([a-zA-Z0-9_-]{11})&.*#t=(\d+)m(\d+)s",
     ]
     for pattern in regex_patterns:
         match = re.search(pattern, url)
         if match:
             return match.group(1)
     return None
+
+# def extract_video_id(url):
+#     regex_patterns = [
+#         r"youtube\.com/watch\?v=(\w+)",  # Standard URL
+#         r"youtu\.be/(\w+)",              # Shortened URL
+#         r"youtube\.com/embed/(\w+)",     # Embed URL
+#         r"youtube\.com/v/(\w+)",         # V URL
+#         # URL with timestamp
+#         r"youtube\.com/watch\?v=(\w+)&.*#t=(\d+)m(\d+)s",
+#     ]
+#     for pattern in regex_patterns:
+#         match = re.search(pattern, url)
+#         if match:
+#             return match.group(1)
+#     return None
 
 headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36'}
 
@@ -64,7 +83,7 @@ def get_transcript(url):
     ''' youtube '''
     video_id = extract_video_id(url)
     if video_id is None:
-        print("Could not extract video ID from URL")
+        log.error("Could not extract video ID from URL")
         return None
 
     try:
@@ -74,7 +93,7 @@ def get_transcript(url):
             full_transcript += " " + line['text']
         return full_transcript
     except Exception as e:
-        print("An error occurred:", e)
+        log.error("An error occurred:", e)
         return None
 
 
@@ -99,7 +118,7 @@ def sanitize(filename):
     return sanitized_filename
 
 
-class Download:
+class Downloader:
     '''
     1. Download and cache a url to disk
     2. Fetch it, and convert nicely to unicode
@@ -137,17 +156,19 @@ class Download:
 
         # Save if not cached
         if not dir_path.exists():
-
+            log.info(f'URL hasnt been cached, fetching')
             # Github
             if 'github.com' in url:
+                log.info(f'Downloading Github URL: {url}')
                 os.makedirs(dir_path, exist_ok=True)
                 Repo.clone_from(url, dir_path)
 
             # Youtube
             elif 'youtube.com' in url or 'youtu.be' in url:
+                log.info(f'Downloading Youtube URL: {url}')
                 video_id = extract_video_id(url)
                 if video_id is None:
-                    print("Could not extract video ID from URL")
+                    log.error("Could not extract video ID from URL")
                 else:
                     try:
                         title = get_video_title(url)
@@ -166,14 +187,14 @@ class Download:
                         with open(file_path, 'w') as fp:
                             fp.write(full_transcript)
                     except Exception as e:
-                        print("An error occurred:", e)
+                        log.error("An error occurred:", e)
 
             # Other
             else:
                 try:
                     response = requests.get(url, headers=headers)
                 except requests.exceptions.SSLError as e:
-                    print(f'SSLError: {e}')
+                    log.error(f'SSLError: {e}')
                     # response = requests.get(url, headers=headers, verify=False)
                     return []
 
@@ -182,6 +203,7 @@ class Download:
 
                     # HTML
                     if file_ext == '.html':
+                        log.info(f'Downloading URL as HTML: {url}')
                         content = response.text
                         soup = BeautifulSoup(content, 'html.parser')
 
@@ -211,32 +233,33 @@ class Download:
                         file_path = dir_path / f'{title}{file_ext}'
                         os.makedirs(dir_path, exist_ok=True)
                         with open(file_path, 'w') as fp:
-                            print(f'writing: {file_path}')
+                            log.debug(f'writing: {file_path}')
                             fp.write(soup.get_text(separator=' '))
 
                     # PDF
                     elif file_ext == '.pdf':
+                        log.info(f'Downloading URL as PDF: {url}')
                         if title is None:
                             title = url_sane
                         file_path = dir_path / f'{title}{file_ext}'
                         os.makedirs(dir_path, exist_ok=True)
                         with open(file_path, 'wb') as fp:  # note the 'wb' here
-                            print(f'writing: {file_path}')
+                            log.debug(f'writing: {file_path}')
                             fp.write(response.content)  # note the use of content instead of text here
 
                     # OTHER
                     else:
+                        log.info(f'Downloading URL as "Other": {url}')
                         content = response.text
                         if title is None:
                             title = url_sane
                         file_path = dir_path / f'{title}{file_ext}'
                         os.makedirs(dir_path, exist_ok=True)
                         with open(file_path, 'w') as fp:
-                            print(f'writing: {file_path}')
+                            log.debug(f'writing: {file_path}')
                             fp.write(content)
-
                 else:
-                    print(f'NOT FOUND: {url}, {response.status_code}, {response}')
+                    log.error(f'NOT FOUND: {url}, {response.status_code}, {response}')
 
         # Read back off disk
         files = []
@@ -257,7 +280,7 @@ class Download:
         files = self.fetch(title, url)
         contents = []
         for file_path, buf in files:
-            contents.append(file_path, read_unicode(file_path, buf))
+            contents.append((file_path, read_unicode(file_path, buf)))
 
         return contents
 
@@ -300,7 +323,7 @@ VALUES (?, ?, ?, ?)
 ##################################################
 # Go
 
-def save_url(title: Union[str, None], url: str, dl: Download, db_path):
+def save_url(title: Union[str, None], url: str, dl: Downloader, db_path):
     files = dl.fetch_utf8(title, url)
     with sqlite3.connect(db_path) as conn:
         for path, content in files:
@@ -316,7 +339,7 @@ def save_docs(references, dl, db_path):
         futures = []
         for title, url in references:
             if url is None:
-                print("No URL provided")
+                log.error("No URL provided")
                 continue
 
             futures.append(executor.submit(save_url, title, url, dl, db_path))
@@ -360,7 +383,7 @@ if __name__ == '__main__':
     DB_PATH = 't12_resources.sqlite3'
     initialize_database(DB_PATH)
 
-    dl = Download(OUTPUT_PATH)
+    dl = Downloader(OUTPUT_PATH)
 
     if ACTION == 'save':
         print('SAVING')

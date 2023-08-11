@@ -1,5 +1,11 @@
-from uniteai.document import download as d
-from uniteai.document import embed as e
+'''
+
+Stitch together `download` and `embed`. This file should be deleted eventually.
+
+'''
+
+import uniteai.document.download as d
+import uniteai.document.embed as e
 
 from InstructorEmbedding import INSTRUCTOR
 from dataclasses import dataclass
@@ -93,6 +99,22 @@ WHERE url = ?
     return result if result else (None, None, None, None)
 
 
+def search_helper(search,
+                  db_path,
+                  titles_urls,
+                  query,
+                  window_size=200, stride=50, top_n=5, visualize=False):
+    with sqlite3.connect(db_path) as conn:
+        results = []
+        for title, url in titles_urls:
+            title, file_path, content, url = load_from_database(conn, title, url)
+            if not title:
+                continue
+            result = search.search(file_path, query, window_size, stride, top_n, visualize)
+            results.append((url, title, result))
+        return results
+
+
 ##################################################
 # Test
 
@@ -110,20 +132,9 @@ if False:
     search = e.Search(model,
                       EMBEDDING_CACHE,
                       embedding,
-                      percentile=90,)
-
-    def search_helper(connection,
-                      titles_urls,
-                      query,
-                      window_size=200, stride=50, top_n=5, visualize=False):
-        results = []
-        for title, url in titles_urls:
-            title, file_path, content, url = load_from_database(connection, title, url)
-            if not title:
-                continue
-            result = search.search(file_path, query, window_size, stride, top_n, visualize)
-            results.append((url, title, result))
-        return results
+                      denoise_window_size=1000,
+                      denoise_poly_order=1,
+                      percentile=95,)
 
     titles_urls = [
         # ('alice in wonderland', 'https://www.gutenberg.org/cache/epub/11/pg11.txt'),
@@ -135,25 +146,28 @@ if False:
     # query = 'the most psychedelic scene.'
     # query = 'sea creatures'
     # query = 'the girl meets a cat for the first time'
-    # query = 'the girl meets a cat in a tree for the first time'
     # query = 'alice is asleep'
     # query = 'alice meets royalty'
+    # query = 'corporal punishment'
     # query = 'alice talks to a king'
     # query = 'alice talks to a queen'
     # query = 'alice talks to a rabbit'
     # query = 'the chapter title'
 
     # query = 'a benefit of artificial intelligence'
-    # query = 'the greatest dangers from artificial intelligence'
+    query = 'the greatest dangers from artificial intelligence'
     # query = 'an impact on artists'
-    query = 'a new industry will come from A.I.'
+    # query = 'a new industry will come from A.I.'
 
-    with sqlite3.connect(DB_PATH) as conn:
-        xs = search_helper(conn, titles_urls, query,
-                           window_size=500,
-                           stride=50,
-                           top_n=5,
-                           visualize=True)
+
+    xs = search_helper(search,
+                       DB_PATH,
+                       titles_urls,
+                       query,
+                       window_size=5000,
+                       stride=50,
+                       top_n=3,
+                       visualize=True)
 
     print('\n'*20)
     for url, title, res in xs:

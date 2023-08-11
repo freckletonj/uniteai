@@ -2,8 +2,14 @@
 
 An opinionated text-embedding suite for use with `document_chat`.
 
-InstructorEmbedding
-sentence-transformers
+TODO: This should probably use `pgvector` eventually
+
+
+DEPENDENCIES:
+- InstructorEmbedding
+- sentence-transformers
+
+Note, I'm not sure which embedding lib I like most; need to test.
 
 '''
 
@@ -207,7 +213,8 @@ class Search:
         d_similarities = self._tune_percentile(d_similarities)
 
         segs = segments(d_similarities, document)
-        ranked_segments = rank(segs, np.mean)[:top_n]
+        # ranked_segments = rank(segs, np.mean)[:top_n]
+        ranked_segments = rank(segs, np.max)[:top_n]
 
         if visualize:
             import matplotlib.pyplot as plt

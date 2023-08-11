@@ -49,12 +49,21 @@ logging.getLogger('asyncio').setLevel(logging.WARN)
 
 def load_module(module_name, config_yaml, server):
     ''' Useful for loading just the modules referenced in the config. '''
+    logging.info(f'Loading module: {module_name}')
+
     module = importlib.import_module(module_name)
     if hasattr(module, 'configure'):
+        logging.info(f'Configuring module: {module_name}')
         args = module.configure(config_yaml)
+    else:
+        logging.warn(f'No `configure` fn found for: {module_name}')
 
     if hasattr(module, 'initialize'):
         module.initialize(args, server)
+        logging.info(f'Initializing module: {module_name}')
+    else:
+        logging.warn(f'No `initialize` fn found for: {module_name}')
+
 
 
 def main():
