@@ -7,6 +7,7 @@ modules:
   - uniteai.transcription
   - uniteai.openai
   - uniteai.contrib.example
+  - uniteai.document
   # - uniteai.contrib.text_to_speech
 
 
@@ -19,6 +20,19 @@ example:
   start_digit: 13
   end_digit: 1000
   delay: 0.4
+
+
+##########
+# Document Chat
+
+document:
+  download_cache: './download_cache/'
+  embedding_cache: './embedding_cache/'
+  db_path: 'db.sqlite3'
+  model_name: 'thenlper/gte-large'  # SOTA at semantic sim (https://huggingface.co/spaces/mteb/leaderboard)
+  denoise_window_size: 1000
+  denoise_poly_order: 1
+  percentile: 95
 
 
 ##########
