@@ -165,7 +165,7 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
                     window_size=2000,
                     stride=50,
                     top_n=3,
-                    visualize=False)
+                    visualize=True)
 
                 output = output_template(prompt_, search_results)
                 job = BlockJob(

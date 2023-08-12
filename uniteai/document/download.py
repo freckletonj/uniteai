@@ -4,8 +4,6 @@ File Download
 
 '''
 
-
-from pypdf import PdfReader
 from bs4 import BeautifulSoup
 import os
 import requests
@@ -14,13 +12,11 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 import sqlite3
 from git import Repo
-from typing import List, Tuple, Union, Any
+from typing import List, Tuple, Union
 from pathlib import Path
 from io import BytesIO
-import nbformat
 from youtube_transcript_api import YouTubeTranscriptApi
 from uniteai.common import read_unicode
-import requests
 from uniteai.common import mk_logger
 import logging
 
@@ -56,31 +52,21 @@ def extract_video_id(url):
             return match.group(1)
     return None
 
-# def extract_video_id(url):
-#     regex_patterns = [
-#         r"youtube\.com/watch\?v=(\w+)",  # Standard URL
-#         r"youtu\.be/(\w+)",              # Shortened URL
-#         r"youtube\.com/embed/(\w+)",     # Embed URL
-#         r"youtube\.com/v/(\w+)",         # V URL
-#         # URL with timestamp
-#         r"youtube\.com/watch\?v=(\w+)&.*#t=(\d+)m(\d+)s",
-#     ]
-#     for pattern in regex_patterns:
-#         match = re.search(pattern, url)
-#         if match:
-#             return match.group(1)
-#     return None
 
-headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36'}
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36'
+}
+
 
 def get_video_title(url: str):
+    ''' Try to get the title of a Youtube video. '''
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
     return soup.find('meta', property="og:title")["content"]
 
 
 def get_transcript(url):
-    ''' youtube '''
+    ''' Try to get the transcript of a Youtube video. '''
     video_id = extract_video_id(url)
     if video_id is None:
         log.error("Could not extract video ID from URL")
@@ -118,6 +104,57 @@ def sanitize(filename):
     return sanitized_filename
 
 
+def normalize_local_uri(uri):
+    if uri.startswith('file://'):
+        uri = uri[len('file://'):]
+    uri = os.path.expanduser(uri)
+    return uri
+
+
+def is_local_uri(uri):
+    uri = normalize_local_uri(uri)
+    if os.path.exists(uri):
+        return True
+    else:
+        return False
+
+# def read_from_disk(dir_path):
+#     # Read back off disk
+#     files = []
+#     for file_path in dir_path.iterdir():
+#         if not any([file_path.suffix == typ for typ in FILETYPES]):
+#             continue
+#         with open(file_path, 'rb') as fp:
+#             buf = BytesIO(fp.read())
+#             # relative_path = file_path.relative_to(dir_path)
+#             # files.append((relative_path, buf))
+#             files.append((file_path, buf))
+#     return files
+
+def read_from_disk(path: Path) -> List[Tuple[Path, BytesIO]]:
+    files = []
+
+    # If path is a directory
+    if path.is_dir():
+        for file_path in path.iterdir():
+            if file_path.suffix in FILETYPES:
+                with open(file_path, 'rb') as fp:
+                    buf = BytesIO(fp.read())
+                    files.append((file_path, buf))
+
+    # If path is a file
+    elif path.is_file() and path.suffix in FILETYPES:
+        with open(path, 'rb') as fp:
+            buf = BytesIO(fp.read())
+            files.append((path, buf))
+
+    # Path is neither a file nor a directory (or it's an unsupported filetype)
+    else:
+        log.warning(f"Unsupported path or filetype: {path}")
+
+    return files
+
+
 class Downloader:
     '''
     1. Download and cache a url to disk
@@ -141,13 +178,35 @@ class Downloader:
         return '.txt'
 
     def _preprocess_url(self, url: str):
+        ''' Some URLs deserve special treatment. '''
         if 'arxiv.org' in url:
             url = url.replace('abs', 'pdf')
         return url
 
-    def fetch(self, title: Union[str, None], url: str) -> List[BytesIO]:
+    def fetch(self, title: Union[str, None], uri: str) -> List[BytesIO]:
+        ''' Fetches bytes of a file (either from disk or online) based on the provided URI. '''
+        if is_local_uri(uri):
+            return self.fetch_offline(uri)
+        else:
+            return self.fetch_online(title, uri)
+
+    def fetch_offline(self, uri: str) -> List[BytesIO]:
+        ''' Fetches bytes of a file from the local disk based on the provided URI. '''
+        uri = normalize_local_uri(uri)
+        dir_path = Path(uri)
+
+        if not dir_path.exists():
+            log.error(f'Local path does not exist: {uri}')
+            return []
+
+        return read_from_disk(dir_path)
+
+    def fetch_online(self, title: Union[str, None], url: str) -> List[BytesIO]:
         ''' Fetches the bytes of a file, reads from cache if it already exists,
-        or downloads otherwise. '''
+        or downloads otherwise.
+
+        Notice it returns a List because in cases like a git repo, there are
+        many files represented by one URL.'''
         # Preprocess
         url = self._preprocess_url(url)
 
@@ -261,17 +320,7 @@ class Downloader:
                 else:
                     log.error(f'NOT FOUND: {url}, {response.status_code}, {response}')
 
-        # Read back off disk
-        files = []
-        for file_path in dir_path.iterdir():
-            if not any([file_path.suffix == typ for typ in FILETYPES]):
-                continue
-            with open(file_path, 'rb') as fp:
-                buf = BytesIO(fp.read())
-                # relative_path = file_path.relative_to(dir_path)
-                # files.append((relative_path, buf))
-                files.append((file_path, buf))
-
+        files = read_from_disk(dir_path)
         return files
 
     def fetch_utf8(self, title: Union[str, None], url: str) -> List[Tuple[str, str]]:
@@ -281,7 +330,7 @@ class Downloader:
         contents = []
         for file_path, buf in files:
             contents.append((file_path, read_unicode(file_path, buf)))
-
+        log.info(contents)
         return contents
 
 
