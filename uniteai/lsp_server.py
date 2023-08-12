@@ -65,7 +65,6 @@ def load_module(module_name, config_yaml, server):
         logging.warn(f'No `initialize` fn found for: {module_name}')
 
 
-
 def main():
     # First pass at configuration. Further passes will pick up config
     # per-feature.
@@ -79,7 +78,7 @@ def main():
         print(f'Starting LSP on port: {args.lsp_port}')
         server.start_tcp(host='localhost', port=args.lsp_port)
     elif args.stdio:
-        print(f'Starting on STDIO')
+        print('Starting on STDIO')
         server.start_io()
 
 

@@ -330,7 +330,6 @@ class Downloader:
         contents = []
         for file_path, buf in files:
             contents.append((file_path, read_unicode(file_path, buf)))
-        log.info(contents)
         return contents
 
 

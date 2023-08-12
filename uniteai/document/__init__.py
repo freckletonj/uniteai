@@ -29,8 +29,6 @@ from threading import Event
 from thespian.actors import Actor
 import argparse
 import logging
-from sentence_transformers import SentenceTransformer
-from InstructorEmbedding import INSTRUCTOR
 import yaml
 
 from uniteai.edit import init_block, cleanup_block, BlockJob
@@ -86,6 +84,10 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
             self.percentile = config.percentile
 
         if command == 'initialize':
+            # import here to speed up startup
+            from sentence_transformers import SentenceTransformer
+            # from InstructorEmbedding import INSTRUCTOR
+
             # Load ML Model
             if self.model_name == 'hkunlp/instructor-base':
                 self.model = INSTRUCTOR(self.model_name)
@@ -168,6 +170,8 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
                     visualize=True)
 
                 output = output_template(prompt_, search_results)
+                # emacs lsp-mode doesn't like unicode NULLs
+                output = output.replace('\u0000', '')
                 job = BlockJob(
                     uri=uri,
                     start_tag=START_TAG,
