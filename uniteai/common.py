@@ -25,6 +25,22 @@ from lsprotocol.types import (
     WorkspaceEdit,
     DidChangeTextDocumentParams,
 )
+
+from pypdf import PdfReader
+from bs4 import BeautifulSoup
+import os
+import requests
+from tqdm import tqdm
+import re
+from concurrent.futures import ThreadPoolExecutor
+import sqlite3
+from git import Repo
+from typing import List, Tuple, Union, Any
+from pathlib import Path
+from io import BytesIO
+import nbformat
+from youtube_transcript_api import YouTubeTranscriptApi
+
 import logging
 
 
@@ -119,6 +135,57 @@ def find_pattern_in_document(
             result.append((line_number, start, end))
 
     return result
+
+##################################################
+# IO Helpers
+
+
+def convert_ipynb_to_py(ipynb_buf):
+    ''' Convert ipynb to human-readable python source file.'''
+    nb = nbformat.read(ipynb_buf, as_version=4)
+
+    # Convert cells to Python code with comments
+    python_code = ""
+    for cell in nb.cells:
+        if cell.cell_type == 'code':
+            # Add the code cell's content to the Python code
+            python_code += cell.source.strip() + "\n\n"
+        elif cell.cell_type == 'markdown':
+            # Add the markdown content as comments
+            lines = cell.source.strip().split('\n')
+            for line in lines:
+                python_code += f"# {line}\n"
+            python_code += "\n"
+    return python_code
+
+
+def read_unicode(file_path, buf=None):
+    '''Read a file_path in as a unicode string.
+
+    Args:
+      file_path: a path to a file to read
+      buf: if the file has already been read into an IO buffer, we can use it
+    '''
+    file_path = Path(file_path)
+
+    if buf is None:
+        with open(file_path, 'rb') as fp:
+            buf = BytesIO(fp.read())
+
+    file_content = buf.getvalue()
+    if file_path.suffix == '.pdf':
+        pdf = PdfReader(BytesIO(file_content))
+        return '\n'.join(page.extract_text() for page in pdf.pages)
+    elif file_path.suffix == '.html':
+        soup = BeautifulSoup(file_content, "html.parser")
+        return soup.get_text()
+    elif file_path.suffix == '.txt' or file_path.suffix == '.json':
+        return file_content.decode('utf-8')
+    elif file_path.suffix == '.txt' or file_path.suffix == '.ipynb':
+        py = convert_ipynb_to_py(buf)
+        return py
+    else:
+        return file_content.decode('utf-8', errors='ignore')
 
 
 ##################################################
