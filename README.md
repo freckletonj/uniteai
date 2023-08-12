@@ -11,47 +11,34 @@
 
 **Requirements:** Python 3
 
-**Editor:** VSCode(ium) or Emacs or any editor with LSP capabilities (most).
+**Editor:** VSCode(ium) or Emacs or Any Editor with LSP capabilities (most).
+
+## The Mission
+<br>
+<p align="center">
+<em>The future is about Humans Augmented with AIs.</em>
+</p>
+<br>
+<br>
+
+We need our **AI Stack** (Online, or local models)
+
+Inside a **convenient interface** (Text Editors > Web UIs)
+
+Friendly with **any editor** (The project is an [LSP](https://en.wikipedia.org/wiki/Language_Server_Protocol) and therefore highly portable)
+
+And **close to the code** (It's easy to tweak and add features. All the logic happens in friendly *python* code, not bespoke one-off editor code).
 
 
 ## Screencast Demo
 
+### Some Core Features
+
 [screencast.webm](https://github.com/freckletonj/uniteai/assets/8399149/6cc56405-bf8f-4b1c-89d3-dbe4ff0c794f)
 
-## The Vision
+### Document Chat (***NEW***)
 
-### AIs, Why?
-
-As we integrate more technology into our lives, it's becoming clear that our interactions with these systems will be more and more AI-mediated. This project envisions a future where:
-
-1. **Creation:** We co-create code, books, emails, work outputs, and more with AI.
-2. **Management:** AI aids in task and process handling.
-3. **Learning:** We learn and explore new concepts with AI.
-4. **Entertainment:** Our leisure times are enhanced through AI interaction.
-
-This project hopes build **A Good Interface**.
-
-
-### But why this project?
-
-
-* **The Human-AI Team:** feed off each others' strengths
-
-  |                        | **AI** | **You** |
-  |:-----------------------|--------|---------|
-  | Knows what you want    |        | ✓       |
-  | Doesn't hallucinate    |        | ✓       |
-  | Knows a ton            | ✓      |         |
-  | Thinks super fast      | ✓      |         |
-  | Easy to automate tasks | ✓      |         |
-
-* **One-for-All AI Environment:** get your AI Stack in *one* environment, get synergy among the tools.
-
-* **Self-hosted AI Stack:** more control, better security and customization.
-
-* **High speed communication:** Ultimate man-machine flow needs high-speed communication. Symbolic language is best served in a text-editor environment. Natural language integrates seamlessly via voice-to-text.
-
-* **Conclusion:** *Let's get a local AI stack cozy inside a text editor.*
+[screencast_document_chat.webm](https://github.com/freckletonj/uniteai/assets/8399149/b20eea79-431e-44bb-b782-24c57edc1b88)
 
 
 ## Quickstart, installing Everything
