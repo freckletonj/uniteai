@@ -21,13 +21,13 @@ import logging
 
 
 # TQDM can be useful for debugging, but prints to stderr which makes VSCode
-# flip out. At least I think that's what was going on.
-# DEBUG = False
-# if DEBUG:
-#     from tqdm import tqdm
-# else:
-def tqdm(x, *args, **kwargs):
-    return x
+# flip out.
+DEBUG = False
+if DEBUG:
+    from tqdm import tqdm
+else:
+    def tqdm(x, *args, **kwargs):
+        return x
 
 FILETYPES = [
     '.pdf',

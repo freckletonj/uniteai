@@ -24,13 +24,13 @@ import hashlib
 import sys
 
 # TQDM can be useful for debugging, but prints to stderr which makes VSCode
-# flip out. At least I think that's what was going on.
-# DEBUG = False
-# if DEBUG:
-#     from tqdm import tqdm
-# else:
-def tqdm(x, *args, **kwargs):
-    return x
+# flip out.
+DEBUG = False
+if DEBUG:
+    from tqdm import tqdm
+else:
+    def tqdm(x, *args, **kwargs):
+        return x
 
 log = mk_logger('document_chat', logging.DEBUG)
 
@@ -145,6 +145,10 @@ class Search:
         document_length = len(embeddings) * stride + window_size - 1
         similarities = np.zeros(document_length, dtype=float)
         overlaps = np.zeros(document_length, dtype=float)
+
+        # OK, this is ugly. SentenceTransformers uses `tqdm` progress bars which
+        # output to `stderr`, which VSCode interprets as an error, and then
+        # blows up. To combat this, we must temporarily redirect to devnull.
 
         # Backup the original stdout/stderr
         original_stdout = sys.stdout
