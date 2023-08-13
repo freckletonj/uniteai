@@ -150,18 +150,14 @@ class Search:
         # output to `stderr`, which VSCode interprets as an error, and then
         # blows up. To combat this, we must temporarily redirect to devnull.
 
-        # Backup the original stdout/stderr
+        # Backup the original stdout/stderr, then restore after.
         original_stdout = sys.stdout
         original_stderr = sys.stderr
-
-        # Redirect stdout and stderr to null device
         sys.stdout = open(os.devnull, 'w')
         sys.stderr = open(os.devnull, 'w')
 
-        # Call the function that produces unwanted output
-        query_e = self.model.encode(query)
+        query_e = self.model.encode(query)  # SentenceTransformer
 
-        # Restore the original stdout/stderr
         sys.stdout = original_stdout
         sys.stderr = original_stderr
 
