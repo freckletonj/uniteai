@@ -168,6 +168,28 @@ Your client configuration determines this, so if you are using the example clien
 * `Ctrl-Alt-d` on ubuntu means defaults to "minimize all windows". You can [disable](https://askubuntu.com/a/177994/605552) that.
 
 
+# "Neural" Document Lookup
+
+For the `document` feature, you can reference one of multiple document types, and lookup passages with a similar "gist" to them (semantic similarity search).
+
+Check that your `.uniteai.yaml` config has `uniteai.document` enabled.
+
+You can use links to: YouTube (will read transcripts), Arxiv papers, PDFs, Git repos, or any HTML.
+
+To use this feature, write some YAML, highlight it, and hit `C-c l d` (emacs) or `C-A-d` (vscode).
+
+```yaml
+query:
+docs:
+  - title: (optional)
+    url: ...
+  - title: ...
+    url: ...
+
+```
+
+It will take a couple minutes for long documents to get an embedding for each chunk it finds in the document, but that then gets cached and goes fast afterward.
+
 ## Contributions
 
 ### Why?
