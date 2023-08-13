@@ -3,7 +3,7 @@
 	"description": "Use AI in your Editor.",
 	"author": "uniteai",
 	"license": "Apache-2.0",
-	"version": "0.1.12",
+	"version": "0.2.0",
     "icon": "icon.jpeg",
 	"repository": {
 		"type": "git",

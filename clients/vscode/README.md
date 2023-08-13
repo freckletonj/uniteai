@@ -29,6 +29,17 @@ npm install
 
 # Publishing
 
+0. Refresh your Azure Personal Access Token [link](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#get-a-personal-access-token).
+
+```
+vsce login uniteai
+# paste token
+```
+
+1. bump version in `package.json`
+
+2.
+
 ```
 npm install -g @vscode/vsce
 
