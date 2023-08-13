@@ -39,6 +39,19 @@
                  `(:command "command.exampleCounter"
                     :arguments ,(vector doc pos)))))
 
+;; Document
+(defun lsp-document ()
+  (interactive)
+  (unless (region-active-p)
+    (error "No region selected"))
+  (let* (
+         (doc (lsp--text-document-identifier))
+         (range (list :start (lsp--point-to-position (region-beginning))
+                      :end (lsp--point-to-position (region-end)))))
+    (lsp-request "workspace/executeCommand"
+                 `(:command "command.document"
+                   :arguments ,(vector doc range)))))
+
 ;; Local LLM
 (defun lsp-local-llm ()
   (interactive)
@@ -101,6 +114,8 @@
 
             (define-key map (kbd "C-c l g") 'lsp-openai-gpt)
             (define-key map (kbd "C-c l c") 'lsp-openai-chatgpt)
+
+            (define-key map (kbd "C-c l d") 'lsp-document)
             map))
 
 ;; set debug logs, but slows it down

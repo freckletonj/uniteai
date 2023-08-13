@@ -4,12 +4,8 @@ Commonly needed functions. TODO: should probably be relocated
 
 '''
 
-from threading import Lock
 import re
 from typing import List, Tuple
-
-import pygls
-from pygls.server import LanguageServer
 from lsprotocol.types import (
     ApplyWorkspaceEditParams,
     CodeAction,
@@ -28,19 +24,9 @@ from lsprotocol.types import (
 
 from pypdf import PdfReader
 from bs4 import BeautifulSoup
-import os
-import requests
-from tqdm import tqdm
-import re
-from concurrent.futures import ThreadPoolExecutor
-import sqlite3
-from git import Repo
-from typing import List, Tuple, Union, Any
 from pathlib import Path
 from io import BytesIO
 import nbformat
-from youtube_transcript_api import YouTubeTranscriptApi
-
 import logging
 
 

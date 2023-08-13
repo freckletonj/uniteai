@@ -21,11 +21,11 @@ import logging
 from uniteai.common import mk_logger
 import pkg_resources
 
-log = mk_logger('CONFIG', logging.WARN)
+log = mk_logger('CONFIG', logging.INFO)
 
 CONFIG_PATHS = [
-    '.uniteai.yml',
-    '.uniteai.yaml',
+    './.uniteai.yml',
+    './.uniteai.yaml',
     os.path.expanduser('~/.uniteai.yaml'),
     os.path.expanduser('~/.uniteai.yml'),
 ]
@@ -58,6 +58,7 @@ It requires secrets (eg OpenAI Key) so you may prefer to locate it at `~/.unitea
 def load_config(file_paths=CONFIG_PATHS):
     ''' Return first config file that exists. '''
     for file_path in file_paths:
+        file_path = os.path.abspath(file_path)
         if os.path.exists(file_path):
             log.info(f'Reading configuration from: {file_path}')
             with open(file_path, 'r') as f:

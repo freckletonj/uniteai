@@ -13,29 +13,24 @@ Note, I'm not sure which embedding lib I like most; need to test.
 
 '''
 
-from InstructorEmbedding import INSTRUCTOR
-from dataclasses import dataclass
-from pypdf import PdfReader
 from scipy.signal import savgol_filter
 from sklearn.metrics.pairwise import cosine_similarity
-from tqdm import tqdm
-from typing import List, Any
-import argparse
+from typing import List
 import logging
 import numpy as np
 import os
-import pickle
-from asyncio import Queue
-import asyncio
-import threading
-import concurrent.futures
-from queue import Empty
-import multiprocessing
-import torch
 from uniteai.common import mk_logger, read_unicode
 import hashlib
-from pathlib import Path
-import pickle
+import sys
+
+# TQDM can be useful for debugging, but prints to stderr which makes VSCode
+# flip out.
+DEBUG = False
+if DEBUG:
+    from tqdm import tqdm
+else:
+    def tqdm(x, *args, **kwargs):
+        return x
 
 log = mk_logger('document_chat', logging.DEBUG)
 
@@ -151,13 +146,25 @@ class Search:
         similarities = np.zeros(document_length, dtype=float)
         overlaps = np.zeros(document_length, dtype=float)
 
-        query_e = self.model.encode(query)
+        # OK, this is ugly. SentenceTransformers uses `tqdm` progress bars which
+        # output to `stderr`, which VSCode interprets as an error, and then
+        # blows up. To combat this, we must temporarily redirect to devnull.
+
+        # Backup the original stdout/stderr, then restore after.
+        original_stdout = sys.stdout
+        original_stderr = sys.stderr
+        sys.stdout = open(os.devnull, 'w')
+        sys.stderr = open(os.devnull, 'w')
+
+        query_e = self.model.encode(query)  # SentenceTransformer
+
+        sys.stdout = original_stdout
+        sys.stderr = original_stderr
 
         offsets = list(range(0, document_length - window_size + 1, stride))
         for chunk_e, doc_i in tqdm(zip(embeddings, offsets)):
             sim = cosine_similarity(query_e.reshape(1, -1),
                                     chunk_e.reshape(1, -1))[0][0]
-
             for j in range(doc_i, doc_i + window_size):
                 similarities[j] += sim
                 overlaps[j] += 1
@@ -200,13 +207,10 @@ class Search:
         '''
         document = read_unicode(path)
         embeddings = self.embedding.embeddings(path, window_size, stride)
-
         similarities = self._similar_tokens(query, embeddings, window_size, stride)
-
         # # Instruct Embeddings needs this
         # last_edge = int(len(similarities) * 0.01)
         # similarities[-last_edge:] = similarities[-last_edge]
-
         d_similarities = self._denoise_similarities(similarities)
         d_similarities -= d_similarities.min()
         d_similarities /= d_similarities.max()
@@ -215,35 +219,9 @@ class Search:
         segs = segments(d_similarities, document)
         # ranked_segments = rank(segs, np.mean)[:top_n]
         ranked_segments = rank(segs, np.max)[:top_n]
-
         if visualize:
             import matplotlib.pyplot as plt
             plt.plot(similarities)
             plt.plot(d_similarities)
             plt.show()
-
         return ranked_segments
-
-
-if False:
-    try:
-        already_loaded
-    except:
-        model = INSTRUCTOR('hkunlp/instructor-base')
-        already_loaded = True
-
-    DOWNLOAD_CACHE = "./download_cache/"
-    EMBEDDING_CACHE = "./embedding_cache/"
-    embedding = Embedding(model, EMBEDDING_CACHE)
-    search = Search(model, EMBEDDING_CACHE, embedding)
-
-    path = 'download_cache/https_www.gutenberg.org_cache_epub_11_pg11.txt/alice in wonderland.txt'
-    e = embedding.embeddings(path, window_size=200, stride=50)
-    query = 'where is the scene with the caterpillar?'
-
-    window_size = 200
-    stride = 50
-    top_n = 5
-    visualize = True
-
-    xs = search.search(path, query, window_size, stride, top_n, visualize)

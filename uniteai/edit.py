@@ -19,6 +19,7 @@ from queue import Queue, Empty
 import time
 from dataclasses import dataclass
 from uniteai.common import find_tag, workspace_edit, workspace_edits, mk_logger
+import concurrent
 import logging
 
 log = mk_logger('edit', logging.WARN)
@@ -137,45 +138,57 @@ class Edits:
         failed_count = 0
         while True:
             for k, q in self.edit_jobs.items():
-                job = None  # reset
+                try:
+                    job = None  # reset
 
-                # Strict jobs must apply before continuing to pull off the
-                # queue.
-                if failed_job and failed_job.strict:
-                    if failed_count > n_retries_strict:
-                        msg = (
-                            f'a strict job has failed to apply after '
-                            f'{n_retries_strict} attempts. The job was: '
-                            f'{failed_job}')
-                        logging.error(msg)
-                        failed_job = None
-                        failed_count = 0
+                    # Strict jobs must apply before continuing to pull off the
+                    # queue.
+                    if failed_job and failed_job.strict:
+                        if failed_count > n_retries_strict:
+                            msg = (
+                                f'a strict job has failed to apply after '
+                                f'{n_retries_strict} attempts. The job was: '
+                                f'{failed_job}')
+                            logging.error(msg)
+                            failed_job = None
+                            failed_count = 0
+                        else:
+                            job = failed_job
+
+                    # If no strict failed_jobs exist, try getting latest off queue,
+                    # or previous non-strict failed jobs.
                     else:
-                        job = failed_job
+                        # get next strict, or the latest (dropping interim)
+                        job = drain_non_strict_queue(q)
+                        if job:
+                            failed_job = None
+                            failed_count = 0
 
-                # If no strict failed_jobs exist, try getting latest off queue,
-                # or previous non-strict failed jobs.
-                else:
-                    # get next strict, or the latest (dropping interim)
-                    job = drain_non_strict_queue(q)
-                    if job:
-                        failed_job = None
-                        failed_count = 0
+                        # retry failed jobs, if no new tasks exist
+                        if not job and failed_count <= n_retries:
+                            job = failed_job
 
-                    # retry failed jobs, if no new tasks exist
-                    if not job and failed_count <= n_retries:
-                        job = failed_job
+                    # Execute extant jobs.
+                    if job is not None:
+                        success = self.applicator_fn(job)
+                        if success:
+                            failed_job = None
+                            failed_count = 0
+                        if not success:
+                            failed_job = job
+                            failed_count += 1
 
-                # Execute extant jobs.
-                if job is not None:
-                    success = self.applicator_fn(job)
-                    if success:
-                        failed_job = None
-                        failed_count = 0
-                    if not success:
-                        failed_job = job
-                        failed_count += 1
+                except concurrent.futures.CancelledError:
+                    log.error('Critical Error, process_edit_jobs told to stop.')
+
+                except Exception as e:
+                    log.error(f"Exception type: {type(e)}")
+                    log.error(f"Exception args: {e.args}")
+                    safe_message = str(e).encode('utf-8', errors='replace').decode('utf-8')
+                    log.error(f'PROCESS_EDIT_JOBS FAILED: {safe_message}')
+
             time.sleep(self.job_delay)
+
 
 def _attempt_edit_job(ls: LanguageServer, job: LSPJob):
     if isinstance(job, InsertJob):

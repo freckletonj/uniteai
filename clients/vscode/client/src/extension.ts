@@ -48,6 +48,7 @@ export function activate(context: ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('uniteai.transcribe', lspTranscribe));
     context.subscriptions.push(vscode.commands.registerCommand('uniteai.openaiGpt', lspOpenaiGpt));
     context.subscriptions.push(vscode.commands.registerCommand('uniteai.openaiChatgpt', lspOpenaiChatgpt));
+    context.subscriptions.push(vscode.commands.registerCommand('uniteai.document', lspDocument));
 
     // Start the client and launch the server.
     client.start();
@@ -76,6 +77,19 @@ async function lspExampleCounter() {
     client.sendRequest("workspace/executeCommand", {
         command: "command.exampleCounter",
         arguments: [{uri: doc.uri.toString()}, {line: pos.line, character: pos.character}]
+    });
+}
+
+// Document Chat
+async function lspDocument() {
+    const doc = vscode.window.activeTextEditor.document;
+    const range = vscode.window.activeTextEditor.selection;
+    client.sendRequest("workspace/executeCommand", {
+        command: "command.document",
+        arguments: [{uri: doc.uri.toString()}, {
+            start: {line: range.start.line, character: range.start.character},
+            end: {line: range.end.line, character: range.end.character}
+        }]
     });
 }
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "uniteai"
-version = "0.1.17"
+version = "0.2.0"
 description = "AI, Inside your Editor."
 readme = "README.md"
 license = "Apache-2.0"
@@ -67,6 +67,12 @@ all = [
   "SpeechRecognition",
   "openai-whisper",
   "soundfile",
+
+  "GitPython",
+  "nbformat",
+  "youtube-transcript-api",
+  "InstructorEmbedding",
+  "sentence-transformers",
 ]
 
 
