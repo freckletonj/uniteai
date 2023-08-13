@@ -1,3 +1,10 @@
+;;
+;; NOTE: USE `lsp_mode` not `eglot`.
+;;
+;;       `eglot` is only useful if you want to manage `python lsp_server.py`
+;;       yourself for debugging purposes
+;;
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;; EGLOT CONFIGURATION

@@ -7,7 +7,6 @@ File Download
 from bs4 import BeautifulSoup
 import os
 import requests
-from tqdm import tqdm
 import re
 from concurrent.futures import ThreadPoolExecutor
 import sqlite3
@@ -19,6 +18,16 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from uniteai.common import read_unicode
 from uniteai.common import mk_logger
 import logging
+
+
+# TQDM can be useful for debugging, but prints to stderr which makes VSCode
+# flip out. At least I think that's what was going on.
+# DEBUG = False
+# if DEBUG:
+#     from tqdm import tqdm
+# else:
+def tqdm(x, *args, **kwargs):
+    return x
 
 FILETYPES = [
     '.pdf',
@@ -118,18 +127,6 @@ def is_local_uri(uri):
     else:
         return False
 
-# def read_from_disk(dir_path):
-#     # Read back off disk
-#     files = []
-#     for file_path in dir_path.iterdir():
-#         if not any([file_path.suffix == typ for typ in FILETYPES]):
-#             continue
-#         with open(file_path, 'rb') as fp:
-#             buf = BytesIO(fp.read())
-#             # relative_path = file_path.relative_to(dir_path)
-#             # files.append((relative_path, buf))
-#             files.append((file_path, buf))
-#     return files
 
 def read_from_disk(path: Path) -> List[Tuple[Path, BytesIO]]:
     files = []
@@ -398,47 +395,3 @@ def save_docs(references, dl, db_path):
             files = future.result()
             out += files
         return out
-
-
-if __name__ == '__main__':
-    references = [
-        (None, 'https://arxiv.org/abs/2212.06094'),
-        (None, "https://arxiv.org/abs/2306.03081"),
-        (None, "https://github.com/microsoft/guidance"),
-        (None, "https://arxiv.org/abs/2201.11227"),
-        (None, "https://arxiv.org/abs/1704.07535"),
-        (None, 'http://cs.brown.edu/courses/cs146/assets/papers/language_models_are_unsupervised_multitask_learners.pdf'),
-        (None, "https://arxiv.org/abs/2109.05093"),
-        (None, "https://arxiv.org/abs/1508.07909"),
-        (None, 'https://arxiv.org/abs/1706.03762'),
-        (None, "https://lilianweng.github.io/posts/2021-01-02-controllable-text-generation/"),
-        (None, "https://github.com/r2d4/rellm"),
-        (None, 'https://github.com/r2d4/parserllm'),
-        (None, 'https://github.com/normal-computing/outlines'),
-        (None, 'https://github.com/shreyar/guardrails'),
-        (None, 'https://github.com/eth-sri/lmql'),
-        (None, 'https://github.com/1rgs/jsonformer'),
-        (None, 'https://github.com/Shopify/torch-grammar/'),
-        (None, 'https://github.com/ggerganov/llama.cpp'),
-        (None, 'https://www.youtube.com/watch?v=Se91Pn3xxSs'),
-        (None, 'http://paulgraham.com/ds.html'),
-        ('alice in wonderland', 'https://www.gutenberg.org/cache/epub/11/pg11.txt'),
-    ]
-
-    # args
-    ACTION = 'save'  # {save, load}
-    OUTPUT_PATH = "./t12_outputs"
-    DB_PATH = 't12_resources.sqlite3'
-    initialize_database(DB_PATH)
-
-    dl = Downloader(OUTPUT_PATH)
-
-    if ACTION == 'save':
-        print('SAVING')
-        saved = save_docs(references, dl, DB_PATH)
-
-    if ACTION == 'load':
-        print('LOADING')
-        loaded = {}
-        for url in references:
-            loaded[url] = dl.fetch_utf8(url)

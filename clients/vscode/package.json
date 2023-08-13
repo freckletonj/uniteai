@@ -113,6 +113,10 @@
                 "title": "LSP Example Counter"
             },
             {
+                "command": "uniteai.document",
+                "title": "LSP Semantic Query over Documents"
+            },
+            {
                 "command": "uniteai.localLlm",
                 "title": "LSP Local LLM"
             },
@@ -140,6 +144,12 @@
                 "command": "uniteai.exampleCounter",
                 "key": "ctrl+alt+e",
                 "mac": "cmd+alt+e",
+                "when": "editorTextFocus"
+            },
+            {
+                "command": "uniteai.document",
+                "key": "ctrl+alt+d",
+                "mac": "cmd+alt+d",
                 "when": "editorTextFocus"
             },
             {

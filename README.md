@@ -155,6 +155,7 @@ Your client configuration determines this, so if you are using the example clien
 | VSCode      | Emacs   | Effect                                               |
 |:------------|:--------|:-----------------------------------------------------|
 | <lightbulb> | M-'     | Show Code Actions Menu                               |
+| Ctrl-Alt-d  | C-c l d | Do semantic search on a document                     |
 | Ctrl-Alt-g  | C-c l g | Send region to **GPT**, stream output to text buffer |
 | Ctrl-Alt-c  | C-c l c | Same, but **ChatGPT**                                |
 | Ctrl-Alt-l  | C-c l l | Same, but **Local (eg Falcon) model**                |
@@ -162,7 +163,9 @@ Your client configuration determines this, so if you are using the example clien
 | Ctrl-Alt-s  | C-c l s | Whatevers streaming, stop it                         |
 
 
-*I'm still figuring out what's most ergonomic, so, I'm accepting feedback.*
+* *I'm still figuring out what's most ergonomic, so, I'm accepting feedback.*
+
+* `Ctrl-Alt-d` on ubuntu means defaults to "minimize all windows". You can [disable](https://askubuntu.com/a/177994/605552) that.
 
 
 ## Contributions

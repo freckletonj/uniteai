@@ -39,6 +39,7 @@ import uniteai.document.download as download
 import uniteai.document.demo as demo
 import traceback
 
+
 ##################################################
 # Document
 
@@ -86,13 +87,9 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
         if command == 'initialize':
             # import here to speed up startup
             from sentence_transformers import SentenceTransformer
-            # from InstructorEmbedding import INSTRUCTOR
 
             # Load ML Model
-            if self.model_name == 'hkunlp/instructor-base':
-                self.model = INSTRUCTOR(self.model_name)
-            else:
-                self.model = SentenceTransformer(self.model_name)
+            self.model = SentenceTransformer(self.model_name)
 
             # Load helper classes
             download.initialize_database(self.db_path)
@@ -156,7 +153,6 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
                 for d in docs:
                     titles_urls.append((d['title'] if 'title' in d else None,
                                         d['url']))
-
                 download.save_docs(titles_urls, self.dl, self.db_path)
 
                 search_results = demo.search_helper(
@@ -167,7 +163,7 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
                     window_size=2000,
                     stride=50,
                     top_n=3,
-                    visualize=True)
+                    visualize=False)
 
                 output = output_template(prompt_, search_results)
                 # emacs lsp-mode doesn't like unicode NULLs
