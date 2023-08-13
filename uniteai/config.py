@@ -64,6 +64,7 @@ def load_config(file_paths=CONFIG_PATHS):
             with open(file_path, 'r') as f:
                 return yaml.safe_load(f)
 
+
 def get_args():
     ''' This first pass will learn generic LSP-related config, and what further
     modules need to be loaded. Those modules will be able to specify their own

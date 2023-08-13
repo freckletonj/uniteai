@@ -15,13 +15,9 @@ from lsprotocol.types import (
 
     TEXT_DOCUMENT_DID_OPEN,
     DidOpenTextDocumentParams,
-    Diagnostic,
-    Range,
-    Position,
 )
 from pygls.protocol import default_converter
 from concurrent.futures import ThreadPoolExecutor
-from threading import Event
 from thespian.actors import ActorSystem
 import uniteai.edit as edit
 import logging
@@ -29,6 +25,7 @@ from uniteai.common import mk_logger
 
 NAME = 'server.py'
 log = mk_logger(NAME, logging.DEBUG)
+
 
 ##################################################
 # Server

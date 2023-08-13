@@ -172,6 +172,7 @@ def openai_autocomplete(engine, text, max_length):
                 generated_text = delta['content']
                 yield generated_text
 
+
 def openai_stream_fn(uri, prompt, engine, max_length, stop_event, edits):
     log.debug(f'START: OPENAI_STREAM_FN, max_length={max_length}')
     try:
@@ -262,8 +263,6 @@ def configure(config_yaml):
     # are sent via cli.
     args, _ = parser.parse_known_args()
     return args
-
-
 
 
 def initialize(config, server):
