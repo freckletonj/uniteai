@@ -147,22 +147,8 @@ class Search:
         document_length = len(embeddings) * stride + window_size - 1
         similarities = np.zeros(document_length, dtype=float)
         overlaps = np.zeros(document_length, dtype=float)
-
-        # OK, this is ugly. SentenceTransformers uses `tqdm` progress bars which
-        # output to `stderr`, which VSCode interprets as an error, and then
-        # blows up. To combat this, we must temporarily redirect to devnull.
-
-        # Backup the original stdout/stderr, then restore after.
-        original_stdout = sys.stdout
-        original_stderr = sys.stderr
-        sys.stdout = open(os.devnull, 'w')
-        sys.stderr = open(os.devnull, 'w')
-
-        query_e = self.model.encode(query)  # SentenceTransformer
-
-        sys.stdout = original_stdout
-        sys.stderr = original_stderr
-
+        # VScode interprets progress bar (stderr) as error
+        query_e = self.model.encode(query, show_progress_bar=False)
         offsets = list(range(0, document_length - window_size + 1, stride))
         for chunk_e, doc_i in tqdm(zip(embeddings, offsets)):
             sim = cosine_similarity(query_e.reshape(1, -1),
