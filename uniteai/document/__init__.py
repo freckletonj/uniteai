@@ -3,7 +3,8 @@
 Document Search.
 
 ----------
-Format of documents to load, Yaml:
+
+How to format a request to this feature:
 
     query:
     docs:
@@ -36,7 +37,6 @@ from uniteai.common import extract_range, find_block, mk_logger, get_nested
 from uniteai.server import Server
 import uniteai.document.embed as embed
 import uniteai.document.download as download
-import uniteai.document.demo as demo
 import traceback
 
 
@@ -155,7 +155,7 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
                                         d['url']))
                 download.save_docs(titles_urls, self.dl, self.db_path)
 
-                search_results = demo.search_helper(
+                search_results = embed.search_helper(
                     self.search,
                     self.db_path,
                     titles_urls,
@@ -257,19 +257,13 @@ def configure(config_yaml):
     parser.add_argument('--denoise_poly_order', default=get_nested(config_yaml, ['document', 'denoise_poly_order']))
     parser.add_argument('--percentile', default=get_nested(config_yaml, ['document', 'percentile']))
 
-    # bc this is only concerned with this module's params, do not error if extra
-    # params are sent via cli.
+    # bc this is only concerned with this module's params, do not error if
+    # extra params are sent via cli.
     args, _ = parser.parse_known_args()
     return args
 
 
 def initialize(config, server):
-    # Config
-    # download_cache = config.download_cache
-    # embedding_cache = config.embedding_cache
-    # db_path = config.db_path
-    # model_name = config.model_name
-
     # Actor
     server.add_actor(NAME, DocumentActor)
 

@@ -22,6 +22,8 @@ import os
 from uniteai.common import mk_logger, read_unicode
 import hashlib
 import sys
+from typing import Union
+import sqlite3
 
 # TQDM can be useful for debugging, but prints to stderr which makes VSCode
 # flip out.
@@ -145,22 +147,8 @@ class Search:
         document_length = len(embeddings) * stride + window_size - 1
         similarities = np.zeros(document_length, dtype=float)
         overlaps = np.zeros(document_length, dtype=float)
-
-        # OK, this is ugly. SentenceTransformers uses `tqdm` progress bars which
-        # output to `stderr`, which VSCode interprets as an error, and then
-        # blows up. To combat this, we must temporarily redirect to devnull.
-
-        # Backup the original stdout/stderr, then restore after.
-        original_stdout = sys.stdout
-        original_stderr = sys.stderr
-        sys.stdout = open(os.devnull, 'w')
-        sys.stderr = open(os.devnull, 'w')
-
-        query_e = self.model.encode(query)  # SentenceTransformer
-
-        sys.stdout = original_stdout
-        sys.stderr = original_stderr
-
+        # VScode interprets progress bar (stderr) as error
+        query_e = self.model.encode(query, show_progress_bar=False)
         offsets = list(range(0, document_length - window_size + 1, stride))
         for chunk_e, doc_i in tqdm(zip(embeddings, offsets)):
             sim = cosine_similarity(query_e.reshape(1, -1),
@@ -225,3 +213,38 @@ class Search:
             plt.plot(d_similarities)
             plt.show()
         return ranked_segments
+
+
+##################################################
+# Dev API
+
+def load_from_database(connection, title: Union[str, None], url):
+    cursor = connection.cursor()
+    if title is not None:
+        cursor.execute("""
+SELECT title, file_path, content, url FROM resources
+WHERE title = ? OR url = ?
+""", (title, url))
+    else:
+        cursor.execute("""
+SELECT title, file_path, content, url FROM resources
+WHERE url = ?
+""", (url,))
+    result = cursor.fetchone()
+    return result if result else (None, None, None, None)
+
+
+def search_helper(search,
+                  db_path,
+                  titles_urls,
+                  query,
+                  window_size=200, stride=50, top_n=5, visualize=False):
+    with sqlite3.connect(db_path) as conn:
+        results = []
+        for title, url in titles_urls:
+            title, file_path, content, url = load_from_database(conn, title, url)
+            if not title:
+                continue
+            result = search.search(file_path, query, window_size, stride, top_n, visualize)
+            results.append((url, title, result))
+        return results

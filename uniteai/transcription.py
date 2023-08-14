@@ -387,8 +387,8 @@ def configure(config_yaml):
     # whisper
     parser.add_argument('--transcription_model_size', default=get_nested(config_yaml, ['transcription', 'model_size']))
 
-    # bc this is only concerned with transcription params, do not error if extra
-    # params are sent via cli.
+    # bc this is only concerned with transcription params, do not error if
+    # extra params are sent via cli.
     args, _ = parser.parse_known_args()
     return args
 

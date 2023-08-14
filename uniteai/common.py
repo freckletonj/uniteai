@@ -7,19 +7,11 @@ Commonly needed functions. TODO: should probably be relocated
 import re
 from typing import List, Tuple
 from lsprotocol.types import (
-    ApplyWorkspaceEditParams,
-    CodeAction,
-    CodeActionKind,
-    CodeActionParams,
-    Command,
     Position,
     Range,
-    TextDocumentIdentifier,
-    VersionedTextDocumentIdentifier,
     OptionalVersionedTextDocumentIdentifier,
     TextEdit,
     WorkspaceEdit,
-    DidChangeTextDocumentParams,
 )
 
 from pypdf import PdfReader
@@ -39,7 +31,9 @@ def mk_logger(name, level):
     logger = logging.getLogger(name)
     handler = logging.StreamHandler()
     handler.setLevel(level)
-    formatter = logging.Formatter('%(asctime)s %(levelname)s:%(name)s => %(message)s [%(pathname)s:%(lineno)d]')
+    formatter = logging.Formatter(
+        '%(asctime)s %(levelname)s:%(name)s => %(message)s [%(pathname)s:%(lineno)d]'
+    )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     return logger
@@ -185,8 +179,10 @@ def workspace_edit(uri: str,
     ''' Build a `WorkspaceEdit` for pygls to send to LSP client. '''
     text_edit = TextEdit(range=Range(start=start, end=end), new_text=new_text)
     text_document_edit = {
-        'textDocument': OptionalVersionedTextDocumentIdentifier(uri=uri,
-                                                        version=version),
+        'textDocument': OptionalVersionedTextDocumentIdentifier(
+            uri=uri,
+            version=version
+        ),
         'edits': [text_edit],
     }
     return WorkspaceEdit(document_changes=[text_document_edit])
@@ -202,8 +198,10 @@ def workspace_edits(uri: str,
         for start, end, new_text in start_end_text
     ]
     text_document_edit = {
-        'textDocument': OptionalVersionedTextDocumentIdentifier(uri=uri,
-                                                        version=version),
+        'textDocument': OptionalVersionedTextDocumentIdentifier(
+            uri=uri,
+            version=version
+        ),
         'edits': text_edits,
     }
     return WorkspaceEdit(document_changes=[text_document_edit])

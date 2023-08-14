@@ -47,9 +47,7 @@ from transformers.generation import StoppingCriteriaList
 from typing import List
 import threading
 import torch
-import yaml
 import multiprocessing as mp
-import logging
 from uniteai.common import get_nested
 from uniteai.config import load_config
 import uvicorn
@@ -59,6 +57,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 ##################################################
 # `transformers`
+
 
 def load_model(args):
     name_or_path = args['model_name_or_path']
@@ -74,11 +73,11 @@ def load_model(args):
         tokenizer = AutoTokenizer.from_pretrained(
             name_or_path,
         )
-        revision = {'revision':args['model_commit']} if 'model_commit' in args else {}
-        device_map = {'device_map':args['device_map']} if 'device_map' in args else {}
-        load_in_8bit = {'load_in_8bit':args['load_in_8bit']} if 'load_in_8bit' in args else {}
-        load_in_4bit = {'load_in_4bit':args['load_in_4bit']} if 'load_in_4bit' in args else {}
-        trust_remote_code = {'trust_remote_code':args['trust_remote_code']} if 'trust_remote_code' in args else {}
+        revision = {'revision': args['model_commit']} if 'model_commit' in args else {}
+        device_map = {'device_map': args['device_map']} if 'device_map' in args else {}
+        load_in_8bit = {'load_in_8bit': args['load_in_8bit']} if 'load_in_8bit' in args else {}
+        load_in_4bit = {'load_in_4bit': args['load_in_4bit']} if 'load_in_4bit' in args else {}
+        trust_remote_code = {'trust_remote_code': args['trust_remote_code']} if 'trust_remote_code' in args else {}
 
         model = AutoModelForCausalLM.from_pretrained(
             pretrained_model_name_or_path=name_or_path,
@@ -120,6 +119,7 @@ app = FastAPI()
 def initialize_model():
     global tokenizer, model
     tokenizer, model = load_model(args)
+
 
 ##################################################
 # Local LLM
@@ -217,6 +217,7 @@ def main():
     uvicorn.run("uniteai.llm_server:app",
                 host=get_nested(config, ['local_llm', 'host']),
                 port=get_nested(config, ['local_llm', 'port']))
+
 
 if __name__ == "__main__":
     main()

@@ -10,7 +10,6 @@ USAGE:
 '''
 
 
-import sys
 import logging
 import uniteai.server
 import uniteai.config as config
@@ -35,7 +34,7 @@ import importlib
 #       thread, but spawned threads don't seem to have the same effect.
 
 logging.basicConfig(
-    filename='log_file.log', # TODO: feature loggers still seem to report on stdout
+    filename='log_file.log',  # TODO: feature loggers still seem to report on stdout
     # stream=sys.stdout,
     level=logging.DEBUG,
 )

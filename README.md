@@ -185,10 +185,12 @@ docs:
     url: ...
   - title: ...
     url: ...
-
 ```
 
 It will take a couple minutes for long documents to get an embedding for each chunk it finds in the document, but that then gets cached and goes fast afterward.
+
+[More details.](./uniteai/document/README.md)
+
 
 ## Contributions
 

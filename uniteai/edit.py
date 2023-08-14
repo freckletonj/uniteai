@@ -7,7 +7,6 @@ Jobs for applying textual edits to the LSP client
 from typing import List, Union
 import pygls
 from pygls.server import LanguageServer
-from pygls.workspace import Workspace
 from lsprotocol.types import (
     ApplyWorkspaceEditParams,
     Range,

@@ -231,7 +231,6 @@ def configure(config_yaml):
     return args
 
 
-
 def initialize(config, server):
     # Actor
     server.add_actor(NAME, LocalLLMActor)

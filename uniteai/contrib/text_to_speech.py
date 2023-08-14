@@ -134,6 +134,7 @@ def prep_prompts(text, desired_length=200, max_length=300):
 #     return [sentences[i] + " " + sentences[i + 1]
 #             for i in range(0, len(sentences), 2)]
 
+
 class TextToSpeechActor(Actor):
     def __init__(self):
         self.should_stop = Event()
