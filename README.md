@@ -76,6 +76,21 @@ sudo apt install portaudio19-dev
 
 ```sh
 pip3 install --user "uniteai[all]" # install deps for all features
+```
+
+Make sure you add your python installations `bin/` to your system `PATH` environment variable. This allows your terminal to find the `uniteai_lsp` binary you just installed:
+
+```sh
+# Linux and Mac
+~/.local/bin
+
+# Windows
+C:\Users\USERNAME\AppData\Roaming\Python\PythonXX\Scripts\
+```
+
+And try running it!
+
+```sh
 uniteai_lsp                        # on mac, this may only appear if you open a new terminal
 cat .uniteai.yml                   # checkout the config
 
