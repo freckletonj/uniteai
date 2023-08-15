@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "uniteai"
-version = "0.2.0"
+version = "0.2.1"
 description = "AI, Inside your Editor."
 readme = "README.md"
 license = "Apache-2.0"
@@ -50,6 +50,8 @@ document_chat = [
   "youtube-transcript-api",
   "InstructorEmbedding",
   "sentence-transformers",
+  "pypdf",
+  "beautifulsoup4"
 ]
 all = [
   "accelerate",
@@ -73,6 +75,8 @@ all = [
   "youtube-transcript-api",
   "InstructorEmbedding",
   "sentence-transformers",
+  "pypdf",
+  "beautifulsoup4"
 ]
 
 
