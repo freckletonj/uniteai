@@ -8,7 +8,7 @@
 
 ---
 [![Package version](https://badge.fury.io/py/uniteai.svg)](https://pypi.python.org/pypi/uniteai)
-<a href="https://discord.gg/3K2Q93bug">
+<a href="https://discord.gg/3K2Q93bug" alt="Join Discord">
   <img height="16" src="https://raw.githubusercontent.com/freckletonj/uniteai/master/assets/discord.png" alt='uniteai'>
 </a>
 
