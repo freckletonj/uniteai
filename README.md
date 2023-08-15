@@ -8,8 +8,9 @@
 
 ---
 [![Package version](https://badge.fury.io/py/uniteai.svg)](https://pypi.python.org/pypi/uniteai)
+<br>
 <a href="https://discord.gg/3K2Q93bug">
-  <img height="16" src="./assets/discord.jpg" alt="Join Discord">
+  <img height="32" src="./assets/discord.jpg" alt="Join Discord">
 </a>
 
 **Requirements:** Python 3
