@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="256" height="256" src="https://raw.githubusercontent.com/freckletonj/uniteai/master/assets/icon.jpeg" alt='uniteai'>
+  <img width="256" height="256" src="./assets/icon.jpeg" alt='uniteai'>
 </p>
 
 <p align="center">
@@ -9,7 +9,7 @@
 ---
 [![Package version](https://badge.fury.io/py/uniteai.svg)](https://pypi.python.org/pypi/uniteai)
 <a href="https://discord.gg/3K2Q93bug">
-  <img height="16" src="https://raw.githubusercontent.com/freckletonj/uniteai/master/assets/discord.png" alt="Join Discord">
+  <img height="16" src="./assets/discord.jpg" alt="Join Discord">
 </a>
 
 **Requirements:** Python 3
