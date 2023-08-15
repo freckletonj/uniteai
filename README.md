@@ -8,7 +8,7 @@
 
 ---
 [![Package version](https://badge.fury.io/py/uniteai.svg)](https://pypi.python.org/pypi/uniteai)
-[![Join Discord](./assets/discord.svg)](https://discord.gg/3K2Q93bug)
+[Join Discord ![Join Discord](./assets/discord.svg)](https://discord.gg/3K2Q93bug)
 
 **Requirements:** Python 3
 
