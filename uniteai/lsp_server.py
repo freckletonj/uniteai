@@ -3,17 +3,11 @@
 An LSP server that connects to the LLM server and APIs for doing the brainy
 stuff.
 
-
-USAGE:
-    python lsp_server.py
-
 '''
-
 
 import logging
 import uniteai.server
 import uniteai.config as config
-import importlib
 
 
 ##########
@@ -46,38 +40,17 @@ logging.getLogger('Thespian').setLevel(logging.WARN)
 logging.getLogger('asyncio').setLevel(logging.WARN)
 
 
-def load_module(module_name, config_yaml, server):
-    ''' Useful for loading just the modules referenced in the config. '''
-    logging.info(f'Loading module: {module_name}')
-
-    module = importlib.import_module(module_name)
-    if hasattr(module, 'configure'):
-        logging.info(f'Configuring module: {module_name}')
-        args = module.configure(config_yaml)
-    else:
-        logging.warn(f'No `configure` fn found for: {module_name}')
-
-    if hasattr(module, 'initialize'):
-        module.initialize(args, server)
-        logging.info(f'Initializing module: {module_name}')
-    else:
-        logging.warn(f'No `initialize` fn found for: {module_name}')
-
-
 def main():
     # First pass at configuration. Further passes will pick up config
     # per-feature.
     args, config_yaml, parser = config.get_args()
-    server = uniteai.server.initialize()
-
-    for module_name in args.modules:
-        load_module(module_name, config_yaml, server)
+    server = uniteai.server.initialize(args, config_yaml)
 
     if args.tcp:
-        print(f'Starting LSP on port: {args.lsp_port}')
+        logging.info(f'Starting LSP on port {args.lsp_port}')
         server.start_tcp(host='localhost', port=args.lsp_port)
     elif args.stdio:
-        print('Starting on STDIO')
+        logging.info('Starting on STDIO')
         server.start_io()
 
 
