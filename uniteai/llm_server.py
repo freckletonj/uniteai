@@ -9,7 +9,9 @@ RUN:
 
 
 ----------
-NOTE: Multiprocessing may be nice instead of Threads, BUT:
+
+NOTE: Multiprocessing could potentially be nice instead of Threads,
+     BUT Threads is working great, AND:
 
 I've Struggled to get MP to work.
 

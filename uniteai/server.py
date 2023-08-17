@@ -14,17 +14,53 @@ from lsprotocol.types import (
     TextDocumentIdentifier,
 
     TEXT_DOCUMENT_DID_OPEN,
+    INITIALIZED,
     DidOpenTextDocumentParams,
 )
+
 from pygls.protocol import default_converter
 from concurrent.futures import ThreadPoolExecutor
 from thespian.actors import ActorSystem
 import uniteai.edit as edit
 import logging
 from uniteai.common import mk_logger
+import importlib
+import time
+
 
 NAME = 'server.py'
-log = mk_logger(NAME, logging.DEBUG)
+log = mk_logger(NAME, logging.INFO)
+
+CONCURRENCY_MODEL = 'simpleSystemBase'  # multi-threading (easier debug)
+
+# CONCURRENCY_MODEL = 'multiprocQueueBase'  # multi-processing (faster)
+#
+# NOTE: If you try to load a CUDA model on a separate process you get this
+#       error, and I haven't debugged yet:
+#
+#       RuntimeError: Cannot re-initialize CUDA in forked subprocess. To use
+#       CUDA with multiprocessing, you must use the 'spawn' start method
+
+
+##################################################
+# Module Loading
+
+def load_module(module_name, config_yaml, server):
+    ''' Useful for loading just the modules referenced in the config. '''
+    logging.info(f'Loading module: {module_name}')
+
+    module = importlib.import_module(module_name)
+    if hasattr(module, 'configure'):
+        logging.info(f'Configuring module: {module_name}')
+        args = module.configure(config_yaml)
+    else:
+        logging.warn(f'No `configure` fn found for: {module_name}')
+
+    if hasattr(module, 'initialize'):
+        module.initialize(args, server)
+        logging.info(f'Initializing module: {module_name}')
+    else:
+        logging.warn(f'No `initialize` fn found for: {module_name}')
 
 
 ##################################################
@@ -51,11 +87,18 @@ class Server(LanguageServer):
         self.edits.start()
 
         # Actor System
-        self.actor_system = ActorSystem()
+        self.actor_system = ActorSystem(CONCURRENCY_MODEL)
         self.actors = {}  # each feature (eg Local LLM) gets its own actor)
 
+    def load_modules(self, args, config_yaml):
+        for module_name in args.modules:
+            start_time = time.time()  # keep track of initialization time
+            load_module(module_name, config_yaml, self)
+            end_time = time.time()
+            log.info(f'Loading module {module_name} took {end_time - start_time:.2f} seconds.')
+
     def add_actor(self, name, cls):
-        ''' Adds an Actor, and an Edits job queue '''
+        ''' Adds an Actor, and an Edits job queue for that Actor. '''
         self.edits.create_job_queue(name)
         actor = self.actor_system.createActor(
             cls,
@@ -65,17 +108,25 @@ class Server(LanguageServer):
         return actor
 
     def add_code_action(self, f: Callable[[CodeActionParams], CodeAction]):
+        ''' Code Actions are an LSP term, and your client will show you
+        available Actions. '''
         self.code_actions.append(f)
 
     def tell_actor(self, name, msg):
+        ''' A non-blocking signal to control an Actor. '''
         self.actor_system.tell(self.actors[name], msg)
 
 
-def initialize():
+def initialize(args, config_yaml):
     '''
     A Barebones pygls LSP Server.
     '''
     server = Server("uniteai", "0.1.0")
+
+    @server.feature(INITIALIZED)
+    def on_initialized(initialized_params):
+        log.error('Initialized. Loading optional modules specified in config.')
+        server.load_modules(args, config_yaml)
 
     @server.feature('workspace/didChangeConfiguration')
     def workspace_did_change_configuration(ls: Server, args):
