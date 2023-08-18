@@ -25,7 +25,6 @@ import logging
 import importlib
 
 from uniteai.common import extract_range, mk_logger
-from uniteai.server import Server
 
 os.environ["SUNO_USE_SMALL_MODELS"] = "True"  # must do before `import bark`
 
@@ -308,7 +307,7 @@ def initialize(config, server):
     # Modify Server
     @server.thread()
     @server.command('command.textToSpeechSave')
-    def text_to_speech_save(ls: Server, args):
+    def text_to_speech_save(ls, args):
         if len(args) != 2:
             log.error(f'command.textToSpeechSave: Wrong arguments, received: {args}')
         text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
@@ -336,7 +335,7 @@ def initialize(config, server):
     # Modify Server
     @server.thread()
     @server.command('command.textToSpeechPlay')
-    def text_to_speech_play(ls: Server, args):
+    def text_to_speech_play(ls, args):
         if len(args) != 2:
             log.error(f'command.textToSpeechPlay: Wrong arguments, received: {args}')
         text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
