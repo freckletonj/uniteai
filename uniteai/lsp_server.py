@@ -52,7 +52,21 @@ from lsprotocol.types import (
     WindowWorkDoneProgressCreateRequest,
     WindowWorkDoneProgressCreateResponse,
     WindowWorkDoneProgressCancelNotification,
+    TextDocumentPositionParams,
 
+    CompletionItem,
+    CompletionItemKind,
+    InsertTextFormat,
+    Position,
+    Range,
+    TextEdit,
+    CompletionList,
+    CompletionContext,
+    CompletionTriggerKind,
+    CompletionParams,
+
+    Hover,
+    CompletionOptions,
     CompletionItem,
     CompletionList,
     CompletionItemKind,
@@ -67,14 +81,18 @@ from lsprotocol.types import (
     Command,
     DocumentSymbol,
     SymbolKind,
+    MarkupContent,
+    MarkupKind,
 
-    COMPLETION,
-    SIGNATURE_HELP,
-    DEFINITION,
-    REFERENCES,
-    DOCUMENT_HIGHLIGHT,
-    CODE_LENS,
-    DOCUMENT_SYMBOL,
+    COMPLETION_ITEM_RESOLVE,
+    TEXT_DOCUMENT_COMPLETION,
+    TEXT_DOCUMENT_SIGNATURE_HELP,
+    TEXT_DOCUMENT_DEFINITION,
+    TEXT_DOCUMENT_REFERENCES,
+    TEXT_DOCUMENT_DOCUMENT_HIGHLIGHT,
+    TEXT_DOCUMENT_CODE_LENS,
+    TEXT_DOCUMENT_DOCUMENT_SYMBOL,
+    TEXT_DOCUMENT_HOVER,
 )
 from pygls.protocol import default_converter
 from concurrent.futures import ThreadPoolExecutor
@@ -218,7 +236,6 @@ def create_action(title, cmd):
     def code_action_fn(params: CodeActionParams):
         text_document = params.text_document
         range = params.range
-
         return CodeAction(
                     title=title,
                     kind=CodeActionKind.Refactor,
@@ -229,23 +246,6 @@ def create_action(title, cmd):
                     )
                 )
     return code_action_fn
-
-
-# def create_action(title, cmd):
-#     ''' A Helper for adding Commands as CodeActions. '''
-#     def code_action_fn(params: CodeActionParams):
-#         ''' Send a `stop` signal to all Actors. '''
-#         text_document = params.text_document
-#         return CodeAction(
-#                     title=title,
-#                     kind=CodeActionKind.Refactor,
-#                     command=Command(
-#                         title=title,
-#                         command=cmd,
-#                         arguments=[text_document]
-#                     )
-#                 )
-#     return code_action_fn
 
 
 def initialize(args, config_yaml):
@@ -304,7 +304,7 @@ def initialize(args, config_yaml):
 
 
     ##########
-    # DEMOS, TODO: move to example.py
+    # DEMOS
 
     async def clear_diagnostic_after_delay(uri, delay=3):
         await asyncio.sleep(delay)
@@ -392,70 +392,215 @@ def initialize(args, config_yaml):
         asyncio.create_task(send_report(ls))
         return []
 
+    @server.command("logSomething")
+    async def report_progress(ls, args):
+        '''This is to help debug features that trigger commands, eg code lenses. '''
+        log.info(f'logSomething log: {str(args)}')
+        return []
+
+
     ##########
 
 
-    # # Completion
-    # @server.feature(COMPLETION)
-    # def provide_completions(ls, params):
-    #     return CompletionList(is_incomplete=False, items=[
-    #         CompletionItem(label='myFunction', kind=CompletionItemKind.Function, detail='A sample function'),
-    #     ])
+    @server.feature(TEXT_DOCUMENT_COMPLETION, CompletionOptions(trigger_characters=['.']))
+    async def provide_completions(params: CompletionParams):
+        '''
+        NOTES:
+        * These are not only triggered on the `trigger_character`. It's just that the `trigger_character` also works.
 
-    # # Signature Help
-    # @server.feature(SIGNATURE_HELP)
-    # def provide_signature_help(ls, params):
-    #     signature = SignatureInformation(
-    #         label='myFunction(arg1: string, arg2: int)',
-    #         documentation='A sample function',
-    #         parameters=[
-    #             ParameterInformation(label='arg1', documentation='A string argument'),
-    #             ParameterInformation(label='arg2', documentation='An integer argument'),
-    #         ]
-    #     )
-    #     return SignatureHelp(signatures=[signature])
+        '''
+        # Extract the line text till the position of the autocomplete trigger
+        position = params.position
+        uri = params.text_document.uri
+        doc = server.workspace.get_document(uri)
+        line_text = doc.lines[position.line][:position.character]
 
-    # # Goto Definition
-    # @server.feature(DEFINITION)
-    # def goto_definition(ls, params):
-    #     return [Location(uri='file:///path/to/definition/file.py', range={'start': Position(line=10, character=5), 'end': Position(line=10, character=15)})]
+        if '.' in line_text:  # If the trigger character was used
+            return await triggered_completions()
 
-    # # Find References
-    # @server.feature(REFERENCES)
-    # def find_references(ls, params):
-    #     return [
-    #         Location(uri='file:///path/to/reference1/file.py', range={'start': Position(line=5, character=5), 'end': Position(line=5, character=15)}),
-    #         Location(uri='file:///path/to/reference2/file.py', range={'start': Position(line=8, character=7), 'end': Position(line=8, character=17)}),
-    #     ]
+        return general_completions(line_text)
 
-    # # Document Highlights
-    # @server.feature(DOCUMENT_HIGHLIGHT)
-    # def provide_highlights(ls, params):
-    #     return [
-    #         DocumentHighlight(range={'start': Position(line=10, character=5), 'end': Position(line=10, character=15)}, kind=DocumentHighlightKind.Text)
-    #     ]
+    def general_completions(starting_text):
+        ''' Return general completions based on starting_text. '''
+        # Filtering based on existing text
+        possible_completions = [
+            CompletionItem(
+                label='my_variable_1',
+                kind=CompletionItemKind.Variable,
+                detail='A sample variable',
+                sort_text='aaa',  # Controlling order
+                commit_characters=["."]
+            ),
+            CompletionItem(
+                label='my_variable_2',
+                kind=CompletionItemKind.Variable,
+                detail='A sample variable',
+                sort_text='aaa',  # Controlling order
+                commit_characters=["."]
+            ),
+            CompletionItem(
+                label='a whole sentence can be completed on, but the inserted text changed',
+                kind=CompletionItemKind.Variable,
+                detail='A long natural language example',
+                insert_text='hah tricked you!',
+                sort_text='aab'
+            ),
+            CompletionItem(
+                label='my_function',
+                kind=CompletionItemKind.Function,
+                detail='A sample function',
+                insert_text='my_function(',  # Auto-insert parentheses
+                sort_text='aab'
+            ),
+            CompletionItem(
+                label='''
+def multiline(x):
+    a = 123
+    b = 456
+    c = 789
+    return a + b + c
+'''.strip(),
+                insert_text_format=InsertTextFormat.PlainText,
 
-    # # Code Lens
-    # @server.feature(CODE_LENS)
-    # def provide_code_lens(ls, params):
-    #     return [
-    #         CodeLens(
-    #             range={'start': Position(line=10, character=5), 'end': Position(line=10, character=15)},
-    #             command=Command(title='My Code Lens', command='my.command.identifier', arguments=[]),
-    #         )
-    #     ]
+                # Yassnippet: a tabbable completion
+                # insert_text_format=InsertTextFormat.Snippet,
+            ),
+            CompletionItem(
+                label='my_class',
+                kind=CompletionItemKind.Class,
+                detail='A sample class',
+                insert_text='MyClass',
 
-    # # Document Symbols
-    # @server.feature(DOCUMENT_SYMBOL)
-    # def provide_symbols(ls, params):
-    #     return [
-    #         DocumentSymbol(
-    #             name='myFunction',
-    #             kind=SymbolKind.Function,
-    #             range={'start': Position(line=10, character=5), 'end': Position(line=20, character=5)},
-    #             selection_range={'start': Position(line=10, character=5), 'end': Position(line=10, character=15)},
-    #         )
-    #     ]
+                # This will also add an import statement (or arbitrary edit)
+                additional_text_edits=[
+                    TextEdit(
+                        Range(Position(0, 0), Position(0, 0)),
+                        "import MyClass\n"
+                    )
+                ],
+                sort_text='zzz'
+            ),
+        ]
+
+        # Filtering completions to only include items that start with starting_text.
+        #
+        # The client does it's own filtering, but it also does a fuzzy match
+        # thing that means if you've typed only a few chars, many of the
+        # possible matches *will* match, but probably shouldn't
+        filtered_completions = [item for item in possible_completions if item.label.startswith(starting_text)]
+
+        return CompletionList(
+            # `is_incomplete` means: "I could have given you more completions,
+            #     but didn't want to (IE too resource intensive or too many
+            #     completions possible. Keep typing to narrow the list."
+            is_incomplete=False,
+            items=filtered_completions
+        )
+
+    async def triggered_completions():
+        return CompletionList(
+            is_incomplete=True,
+            items=[
+                CompletionItem(
+                    label="main",
+                    filter_text="mn",  # demonstrate filter_text
+                    sort_text='aaa',
+                    documentation=None,
+                ),
+                CompletionItem(
+                    "foo",
+                    sort_text='aab',
+                    documentation=None,
+                ),
+                # additional items will be fetched in the next completion call...
+            ]
+        )
+
+    # Signature Help
+    @server.feature(TEXT_DOCUMENT_SIGNATURE_HELP)
+    def provide_signature_help(ls, params):
+        ''' The signature help shows up, I think, just in the minibuffer in emacs. '''
+        signature = SignatureInformation(
+            label='myFunctionWithSig(arg1: string, arg2: int)',
+            documentation='A sample function',
+            parameters=[
+                ParameterInformation(label='arg1', documentation='A string argument'),
+                ParameterInformation(label='arg2', documentation='An integer argument'),
+            ]
+        )
+        return SignatureHelp(signatures=[signature])
+
+    # Goto Definition
+    @server.feature(TEXT_DOCUMENT_DEFINITION)
+    def goto_definition(ls, params):
+        return [Location(uri='file:///path/to/definition/file.py',
+                         range=Range(Position(line=10, character=5), Position(line=10, character=15)))]
+
+    # Find References
+    @server.feature(TEXT_DOCUMENT_REFERENCES)
+    def find_references(ls, params):
+        ''' Perhaps you could use this to get cos-sim of embeddings with a doc,
+        and allow you to jump to locations in that doc. '''
+        return [
+            Location(uri='file:///path/to/reference1/file.py', range=Range(Position(line=5, character=5), Position(line=5, character=15))),
+            Location(uri='file:///path/to/reference2/file.py', range=Range(Position(line=8, character=7), Position(line=8, character=17))),
+        ]
+
+    # Document Highlights
+    @server.feature(TEXT_DOCUMENT_DOCUMENT_HIGHLIGHT)
+    def provide_highlights(ls, params):
+        ''' NOTE: You must trigger your client to show highlights '''
+        return [
+            DocumentHighlight(
+                range=Range(Position(line=2, character=0), Position(line=6, character=0)),
+                kind=DocumentHighlightKind.Text
+            )
+        ]
+
+    # Code Lens
+    @server.feature(TEXT_DOCUMENT_CODE_LENS)
+    def provide_code_lens(ls, params):
+        ''' Shows an inline hyperlink that if clicked will trigger a command '''
+        return [
+            CodeLens(
+                range=Range(Position(line=10, character=5), Position(line=10, character=15)),
+                command=Command(title='My Code Lens', command='logSomething', arguments=['an argument', 'wow']),
+            )
+        ]
+
+    # Document Symbols
+    @server.feature(TEXT_DOCUMENT_DOCUMENT_SYMBOL)
+    def provide_symbols(ls, params):
+        ''' Symbols are like function or variable names in a document. '''
+        return [
+            DocumentSymbol(
+                name='mySymbol1',
+                kind=SymbolKind.Function,
+                range=Range(Position(line=10, character=5), Position(line=20, character=5)),
+                selection_range=Range(Position(line=10, character=5), Position(line=10, character=15)),
+            ),
+            DocumentSymbol(
+                name='mySymbol2',
+                kind=SymbolKind.Function,
+                range=Range(Position(line=21, character=5), Position(line=22, character=5)),
+                selection_range=Range(Position(line=21, character=5), Position(line=22, character=15)),
+            )
+        ]
+
+    @server.feature(TEXT_DOCUMENT_HOVER)
+    def hover(ls, params: TextDocumentPositionParams):
+        """Return a hover response."""
+        # You'll typically inspect the params to determine the symbol that the user is hovering over
+        # and fetch appropriate documentation or other relevant details.
+        message = MarkupContent(
+            kind=MarkupKind.Markdown, # alt: MarkupKind.PlainText
+            value="**This is hover documentation!**\n\nExample content for the hover feature."
+        )
+        range = Range(
+            start=Position(line=params.position.line, character=params.position.character),
+            end=Position(line=params.position.line, character=params.position.character + 1)
+        )
+        return Hover(contents=message, range=range)
 
     # Code Actions
     server.add_code_action(create_action("Show Diagnostic Message", "showDiagnostic"))
