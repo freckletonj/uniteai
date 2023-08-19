@@ -34,7 +34,6 @@ import yaml
 
 from uniteai.edit import init_block, cleanup_block, BlockJob
 from uniteai.common import extract_range, find_block, mk_logger, get_nested
-from uniteai.server import Server
 import uniteai.document.embed as embed
 import uniteai.document.download as download
 import traceback
@@ -283,7 +282,7 @@ def initialize(config, server):
     # Modify Server
     @server.thread()
     @server.command('command.document')
-    def document(ls: Server, args):
+    def document(ls, args):
         if len(args) != 2:
             log.error(f'command.document: Wrong arguments, received: {args}')
         text_document = ls.converter.structure(args[0], TextDocumentIdentifier)

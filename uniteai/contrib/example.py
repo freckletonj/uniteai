@@ -25,7 +25,6 @@ import time
 
 from uniteai.edit import init_block, cleanup_block, BlockJob
 from uniteai.common import find_block, mk_logger, get_nested
-from uniteai.server import Server
 
 
 START_TAG = ':START_EXAMPLE:'
@@ -235,7 +234,7 @@ def initialize(config, server):
     # Modify Server
     @server.thread()
     @server.command('command.exampleCounter')
-    def example_counter(ls: Server, args):
+    def example_counter(ls, args):
         if len(args) != 2:
             log.error(f'command.exampleCounter: Wrong arguments, received: {args}')
         text_document = ls.converter.structure(args[0], TextDocumentIdentifier)

@@ -17,7 +17,64 @@ from lsprotocol.types import (
     TextDocumentIdentifier,
     TEXT_DOCUMENT_DID_OPEN,
     INITIALIZED,
+    WINDOW_SHOW_MESSAGE_REQUEST,
     DidOpenTextDocumentParams,
+
+    WINDOW_WORK_DONE_PROGRESS_CREATE,
+    TELEMETRY_EVENT,
+    WorkDoneProgressCreateParams,
+    WorkDoneProgressBegin,
+    WorkDoneProgressEnd,
+    ProgressParams,
+    MessageType,
+
+    MessageActionItem,
+    Diagnostic,
+    Position,
+    Range,
+    DiagnosticSeverity,
+    CodeAction,
+    CodeActionKind,
+    CodeActionParams,
+    MessageType,
+    ShowMessageRequestParams,
+    WorkDoneProgressBegin,
+    WorkDoneProgressEnd,
+    WorkDoneProgressCreateParams,
+
+    WorkDoneProgressEnd,
+    WorkDoneProgressBegin,
+    WorkDoneProgressParams,
+    WorkDoneProgressReport,
+    WorkDoneProgressOptions,
+    WorkDoneProgressCancelParams,
+    WorkDoneProgressCreateParams,
+    WindowWorkDoneProgressCreateRequest,
+    WindowWorkDoneProgressCreateResponse,
+    WindowWorkDoneProgressCancelNotification,
+
+    CompletionItem,
+    CompletionList,
+    CompletionItemKind,
+    SignatureHelp,
+    SignatureInformation,
+    ParameterInformation,
+    Location,
+    Position,
+    DocumentHighlight,
+    DocumentHighlightKind,
+    CodeLens,
+    Command,
+    DocumentSymbol,
+    SymbolKind,
+
+    COMPLETION,
+    SIGNATURE_HELP,
+    DEFINITION,
+    REFERENCES,
+    DOCUMENT_HIGHLIGHT,
+    CODE_LENS,
+    DOCUMENT_SYMBOL,
 )
 from pygls.protocol import default_converter
 from concurrent.futures import ThreadPoolExecutor
@@ -26,6 +83,7 @@ import uniteai.edit as edit
 from uniteai.common import mk_logger
 import importlib
 import time
+import asyncio
 
 NAME = 'lsp_server'
 log = mk_logger(NAME, logging.INFO)
@@ -155,6 +213,41 @@ class Server(LanguageServer):
         self.actor_system.tell(self.actors[name], msg)
 
 
+def create_action(title, cmd):
+    ''' A Helper for adding Commands as CodeActions. '''
+    def code_action_fn(params: CodeActionParams):
+        text_document = params.text_document
+        range = params.range
+
+        return CodeAction(
+                    title=title,
+                    kind=CodeActionKind.Refactor,
+                    command=Command(
+                        title=title,
+                        command=cmd,
+                        arguments=[text_document, range]
+                    )
+                )
+    return code_action_fn
+
+
+# def create_action(title, cmd):
+#     ''' A Helper for adding Commands as CodeActions. '''
+#     def code_action_fn(params: CodeActionParams):
+#         ''' Send a `stop` signal to all Actors. '''
+#         text_document = params.text_document
+#         return CodeAction(
+#                     title=title,
+#                     kind=CodeActionKind.Refactor,
+#                     command=Command(
+#                         title=title,
+#                         command=cmd,
+#                         arguments=[text_document]
+#                     )
+#                 )
+#     return code_action_fn
+
+
 def initialize(args, config_yaml):
     '''
     A Barebones pygls LSP Server.
@@ -163,7 +256,7 @@ def initialize(args, config_yaml):
 
     @server.feature(INITIALIZED)
     def on_initialized(initialized_params):
-        log.error('Initialized. Loading optional modules specified in config.')
+        log.info('Initialized. Loading optional modules specified in config.')
         server.load_modules(args, config_yaml)
 
     @server.feature('workspace/didChangeConfiguration')
@@ -177,7 +270,7 @@ def initialize(args, config_yaml):
         """Text document did open notification. It appears this does not
         overwrite the default `didOpen` handler in pygls, so we can add extra
         `didOpen` logic here."""
-        log.debug(f'Document did open: uri={params.text_document.uri}')
+        log.debug(f'Document opened: uri={params.text_document.uri}')
 
     @server.feature("textDocument/codeAction")
     def code_action(params: CodeActionParams) -> List[CodeAction]:
@@ -209,24 +302,173 @@ def initialize(args, config_yaml):
         for actor in ls.actors:
             ls.tell_actor(actor, actor_args)
 
-    # Add `command.stop` as a "Code Action" too (accessible from the dropdown
-    # menu, eg `M-'`.
-    server.add_code_action(code_action_stop)
-    return server
 
+    ##########
+    # DEMOS, TODO: move to example.py
 
-def code_action_stop(params: CodeActionParams):
-    ''' Send a `stop` signal to all Actors. '''
-    text_document = params.text_document
-    return CodeAction(
-                title='Stop Streaming Things',
-                kind=CodeActionKind.Refactor,
-                command=Command(
-                    title='Stop Streaming Things',
-                    command='command.stop',
-                    arguments=[text_document]
+    async def clear_diagnostic_after_delay(uri, delay=3):
+        await asyncio.sleep(delay)
+        server.publish_diagnostics(uri, [])
+
+    @server.command("showDiagnostic")
+    async def show_diagnostic(ls, args):
+        ''' Make a diagnostic of the highlighted region, and then clear it after
+        3 seconds. '''
+        text_doc = ls.converter.structure(args[0], TextDocumentIdentifier)
+        range = ls.converter.structure(args[1], Range)
+
+        uri = text_doc.uri
+        message = "Sample diagnostic message"
+        diagnostic = Diagnostic(
+            range=range,
+            message=message,
+            severity=DiagnosticSeverity.Warning
+        )
+        server.publish_diagnostics(uri, [diagnostic])
+        asyncio.create_task(clear_diagnostic_after_delay(uri))
+        return []
+
+    @server.command("showPopup")
+    def show_popup(ls, text_doc):
+        ''' This shows up in the minibuffer in emacs. '''
+        ls.show_message("This is a popup message", MessageType.Info)
+
+    @server.command("showMsgRequest")
+    async def show_msg_request(ls, text_doc):
+        params = ShowMessageRequestParams(
+            type=MessageType.Info,
+            message="Is UniteAI the bomb dot com?",
+            actions=[
+                MessageActionItem(title="Yes"),
+                MessageActionItem(title="Of course")
+            ]
+        )
+        response = ls.lsp.send_request(WINDOW_SHOW_MESSAGE_REQUEST, params)
+        response = await asyncio.wrap_future(response)
+        if response:
+            ls.show_message(f"You chose: {response.title}", MessageType.Info)
+
+    async def send_report(ls):
+        # Step 1: Create progress
+        token = "sampleToken"
+        create_params = WorkDoneProgressCreateParams(token=token)
+        response_future = ls.lsp.send_request(WINDOW_WORK_DONE_PROGRESS_CREATE, create_params)
+        await asyncio.wrap_future(response_future)
+
+        # Step 2: Begin Progress
+        progress_begin_params = ProgressParams(
+            token=token,
+            value=WorkDoneProgressBegin(
+                title="Analyzing begins",
+                cancellable=True,
+                message="Starting Message"
+            )
+        )
+        ls.send_notification("$/progress", progress_begin_params)
+
+        # Simulated task with reports
+        for percentage in range(0, 101, 10):
+            await asyncio.sleep(0.5)  # Simulate some work
+            progress_report_params = ProgressParams(
+                token=token,
+                value=WorkDoneProgressReport(
+                    percentage=percentage,
+                    message=f'Task {percentage}% complete'
                 )
             )
+            ls.send_notification("$/progress", progress_report_params)
+
+        # Step 4: End Progress
+        progress_end_params = ProgressParams(
+            token=token,
+            value=WorkDoneProgressEnd(
+                message="Analysis complete"
+            )
+        )
+        ls.send_notification("$/progress", progress_end_params)
+
+    @server.command("reportProgress")
+    async def report_progress(ls, args):
+        asyncio.create_task(send_report(ls))
+        return []
+
+    ##########
+
+
+    # # Completion
+    # @server.feature(COMPLETION)
+    # def provide_completions(ls, params):
+    #     return CompletionList(is_incomplete=False, items=[
+    #         CompletionItem(label='myFunction', kind=CompletionItemKind.Function, detail='A sample function'),
+    #     ])
+
+    # # Signature Help
+    # @server.feature(SIGNATURE_HELP)
+    # def provide_signature_help(ls, params):
+    #     signature = SignatureInformation(
+    #         label='myFunction(arg1: string, arg2: int)',
+    #         documentation='A sample function',
+    #         parameters=[
+    #             ParameterInformation(label='arg1', documentation='A string argument'),
+    #             ParameterInformation(label='arg2', documentation='An integer argument'),
+    #         ]
+    #     )
+    #     return SignatureHelp(signatures=[signature])
+
+    # # Goto Definition
+    # @server.feature(DEFINITION)
+    # def goto_definition(ls, params):
+    #     return [Location(uri='file:///path/to/definition/file.py', range={'start': Position(line=10, character=5), 'end': Position(line=10, character=15)})]
+
+    # # Find References
+    # @server.feature(REFERENCES)
+    # def find_references(ls, params):
+    #     return [
+    #         Location(uri='file:///path/to/reference1/file.py', range={'start': Position(line=5, character=5), 'end': Position(line=5, character=15)}),
+    #         Location(uri='file:///path/to/reference2/file.py', range={'start': Position(line=8, character=7), 'end': Position(line=8, character=17)}),
+    #     ]
+
+    # # Document Highlights
+    # @server.feature(DOCUMENT_HIGHLIGHT)
+    # def provide_highlights(ls, params):
+    #     return [
+    #         DocumentHighlight(range={'start': Position(line=10, character=5), 'end': Position(line=10, character=15)}, kind=DocumentHighlightKind.Text)
+    #     ]
+
+    # # Code Lens
+    # @server.feature(CODE_LENS)
+    # def provide_code_lens(ls, params):
+    #     return [
+    #         CodeLens(
+    #             range={'start': Position(line=10, character=5), 'end': Position(line=10, character=15)},
+    #             command=Command(title='My Code Lens', command='my.command.identifier', arguments=[]),
+    #         )
+    #     ]
+
+    # # Document Symbols
+    # @server.feature(DOCUMENT_SYMBOL)
+    # def provide_symbols(ls, params):
+    #     return [
+    #         DocumentSymbol(
+    #             name='myFunction',
+    #             kind=SymbolKind.Function,
+    #             range={'start': Position(line=10, character=5), 'end': Position(line=20, character=5)},
+    #             selection_range={'start': Position(line=10, character=5), 'end': Position(line=10, character=15)},
+    #         )
+    #     ]
+
+    # Code Actions
+    server.add_code_action(create_action("Show Diagnostic Message", "showDiagnostic"))
+    server.add_code_action(create_action("Show Log Message", "showLog"))
+    server.add_code_action(create_action("Show Popup Message", "showPopup"))
+    server.add_code_action(create_action("Show Message Request", "showMsgRequest"))
+    server.add_code_action(create_action("Report Progress", "reportProgress"))
+
+
+    # Add `command.stop` as a "Code Action" too (accessible from the dropdown
+    # menu, eg `M-'`.
+    server.add_code_action(create_action('Stop Streaming Things', 'command.stop'))
+    return server
 
 
 ##################################################
