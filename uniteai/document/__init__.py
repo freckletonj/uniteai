@@ -263,21 +263,10 @@ def configure(config_yaml):
 
 
 def initialize(config, server):
-    # Actor
-    server.add_actor(NAME, DocumentActor)
-
     # CodeActions
     server.add_code_action(
         lambda params:
         code_action_document(params))
-
-    server.tell_actor(NAME, {
-        'command': 'set_config',
-        'config': config
-    })
-    server.tell_actor(NAME, {
-        'command': 'initialize'
-    })
 
     # Modify Server
     @server.thread()
@@ -307,3 +296,14 @@ def initialize(config, server):
 
         # Return null-edit immediately (the rest will stream)
         return WorkspaceEdit()
+
+
+def post_initialization(config, server):
+    server.add_actor(NAME, DocumentActor)
+    server.tell_actor(NAME, {
+        'command': 'set_config',
+        'config': config
+    })
+    server.tell_actor(NAME, {
+        'command': 'initialize'
+    })

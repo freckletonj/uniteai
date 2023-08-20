@@ -394,16 +394,6 @@ def configure(config_yaml):
 
 
 def initialize(config: argparse.Namespace, server):
-    # Actor
-    server.add_actor(NAME, TranscriptionActor)
-    server.tell_actor(NAME, {
-        'command': 'set_config',
-        'config': config
-    })
-    server.tell_actor(NAME, {
-        'command': 'initialize'
-    })
-
     # CodeActions
     server.add_code_action(code_action_transcribe)
 
@@ -427,3 +417,14 @@ def initialize(config: argparse.Namespace, server):
         }
         ls.tell_actor(NAME, actor_args)
         return {'status': 'success'}
+
+
+def post_initialization(config, server):
+    server.add_actor(NAME, TranscriptionActor)
+    server.tell_actor(NAME, {
+        'command': 'set_config',
+        'config': config
+    })
+    server.tell_actor(NAME, {
+        'command': 'initialize'
+    })
