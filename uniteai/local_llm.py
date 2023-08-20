@@ -22,7 +22,6 @@ import argparse
 
 from uniteai.edit import init_block, cleanup_block, BlockJob
 from uniteai.common import extract_range, find_block, mk_logger, get_nested
-from uniteai.server import Server
 
 
 START_TAG = ':START_LOCAL:'
@@ -244,7 +243,7 @@ def initialize(config, server):
 
     @server.thread()
     @server.command('command.localLlmStream')
-    def local_llm_stream(ls: Server, args):
+    def local_llm_stream(ls, args):
         if len(args) != 2:
             log.error(f'command.localLlmStream: Wrong arguments, received: {args}')
         text_document = ls.converter.structure(args[0], TextDocumentIdentifier)

@@ -19,80 +19,6 @@ from lsprotocol.types import (
     INITIALIZED,
     WINDOW_SHOW_MESSAGE_REQUEST,
     DidOpenTextDocumentParams,
-
-    WINDOW_WORK_DONE_PROGRESS_CREATE,
-    TELEMETRY_EVENT,
-    WorkDoneProgressCreateParams,
-    WorkDoneProgressBegin,
-    WorkDoneProgressEnd,
-    ProgressParams,
-    MessageType,
-
-    MessageActionItem,
-    Diagnostic,
-    Position,
-    Range,
-    DiagnosticSeverity,
-    CodeAction,
-    CodeActionKind,
-    CodeActionParams,
-    MessageType,
-    ShowMessageRequestParams,
-    WorkDoneProgressBegin,
-    WorkDoneProgressEnd,
-    WorkDoneProgressCreateParams,
-
-    WorkDoneProgressEnd,
-    WorkDoneProgressBegin,
-    WorkDoneProgressParams,
-    WorkDoneProgressReport,
-    WorkDoneProgressOptions,
-    WorkDoneProgressCancelParams,
-    WorkDoneProgressCreateParams,
-    WindowWorkDoneProgressCreateRequest,
-    WindowWorkDoneProgressCreateResponse,
-    WindowWorkDoneProgressCancelNotification,
-    TextDocumentPositionParams,
-
-    CompletionItem,
-    CompletionItemKind,
-    InsertTextFormat,
-    Position,
-    Range,
-    TextEdit,
-    CompletionList,
-    CompletionContext,
-    CompletionTriggerKind,
-    CompletionParams,
-
-    Hover,
-    CompletionOptions,
-    CompletionItem,
-    CompletionList,
-    CompletionItemKind,
-    SignatureHelp,
-    SignatureInformation,
-    ParameterInformation,
-    Location,
-    Position,
-    DocumentHighlight,
-    DocumentHighlightKind,
-    CodeLens,
-    Command,
-    DocumentSymbol,
-    SymbolKind,
-    MarkupContent,
-    MarkupKind,
-
-    COMPLETION_ITEM_RESOLVE,
-    TEXT_DOCUMENT_COMPLETION,
-    TEXT_DOCUMENT_SIGNATURE_HELP,
-    TEXT_DOCUMENT_DEFINITION,
-    TEXT_DOCUMENT_REFERENCES,
-    TEXT_DOCUMENT_DOCUMENT_HIGHLIGHT,
-    TEXT_DOCUMENT_CODE_LENS,
-    TEXT_DOCUMENT_DOCUMENT_SYMBOL,
-    TEXT_DOCUMENT_HOVER,
 )
 from pygls.protocol import default_converter
 from concurrent.futures import ThreadPoolExecutor
@@ -102,6 +28,7 @@ from uniteai.common import mk_logger
 import importlib
 import time
 import asyncio
+from functools import partial
 
 NAME = 'lsp_server'
 log = mk_logger(NAME, logging.INFO)
@@ -158,10 +85,19 @@ logging.getLogger('asyncio').setLevel(logging.WARN)
 # config)
 
 def load_module(module_name, config_yaml, server):
-    ''' Useful for loading just the modules referenced in the config. '''
+    ''' Load individual feature modules. This is useful for loading just the
+    modules referenced in the config.
+
+    It loads in 3 steps:
+
+    1. collect config
+
+    2. fast initialization (before connecting to client)
+
+    3. post initialization (after connecting to client) '''
     logging.info(f'Loading module: {module_name}')
 
-    # Collect configuration (eg yml + cli args)
+    # COLLECT CONFIGURATION (eg yml + cli args)
     module = importlib.import_module(module_name)
     if hasattr(module, 'configure'):
         logging.info(f'Configuring module: {module_name}')
@@ -169,12 +105,20 @@ def load_module(module_name, config_yaml, server):
     else:
         logging.warn(f'No `configure` fn found for: {module_name}')
 
-    # Initialize
+    # INITIALIZE. This happens before client connection.
     if hasattr(module, 'initialize'):
         module.initialize(args, server)
         logging.info(f'Initializing module: {module_name}')
     else:
         logging.warn(f'No `initialize` fn found for: {module_name}')
+
+    # POST-INITIALIZATION. These will be called post client conection.
+    if hasattr(module, 'post_initialization'):
+        server.post_initialization.append(
+            partial(module.post_initialization, args)
+        )
+    else:
+        logging.warn(f'No `post_initialization` fn found for: {module_name}')
 
 
 ##################################################
@@ -184,6 +128,11 @@ class Server(LanguageServer):
     def __init__(self, name, version):
         super().__init__(name, version)
         self.code_actions = []
+
+        # Post client-connection. Functions in this list will be called. This is
+        # useful for resource-intensive setup that shouldn't block the client
+        # booting up.
+        self.post_initialization = []
 
         # A ThreadPool for tasks. By throwing long running tasks on here, LSP
         # endpoints can return immediately.
@@ -255,9 +204,10 @@ def initialize(args, config_yaml):
     server = Server("uniteai", "0.0.0")
 
     @server.feature(INITIALIZED)
-    def on_initialized(initialized_params):
-        log.info('Initialized. Loading optional modules specified in config.')
-        server.load_modules(args, config_yaml)
+    def on_initialized(ls, initialized_params):
+        log.info('Initialized. Calling `post_initialization` functions.')
+        for f in ls.post_initialization:
+            f(ls)
 
     @server.feature('workspace/didChangeConfiguration')
     def workspace_did_change_configuration(ls: Server, args):
@@ -302,7 +252,6 @@ def initialize(args, config_yaml):
         for actor in ls.actors:
             ls.tell_actor(actor, actor_args)
 
-
     # Add `command.stop` as a "Code Action" too (accessible from the dropdown
     # menu, eg `M-'`.
     server.add_code_action(create_action('Stop Streaming Things', 'command.stop'))
@@ -317,6 +266,15 @@ def main():
     # per-feature.
     args, config_yaml, parser = config.get_args()
     server = initialize(args, config_yaml)
+
+    # Server features must be registered to the server before connecting. IE you
+    # cannot add `@server.feature(...)` after the server has been
+    # started. Capabilities *can* be dynamically registered, but since clients
+    # don't need to implement that we should avoid it by just registering ahead
+    # of time. This means that you have to be careful to not do
+    # resource-intensive things before `server.start_io()` or the boot time will
+    # be slow and clients will timeout.
+    server.load_modules(args, config_yaml)
 
     if args.tcp:
         logging.info(f'Starting LSP on port {args.lsp_port}')

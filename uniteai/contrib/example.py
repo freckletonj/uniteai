@@ -182,7 +182,8 @@ def code_action_example(params: lsp.CodeActionParams):
 # Setup
 #
 # NOTE: In `.uniteai.yml`, just add `uniteai.example` under `modules`, and this
-#       will automatically get built into the server at runtime.
+#       example feature will automatically get built into the server at
+#       runtime.
 #
 
 def create_action(title, cmd):
@@ -222,15 +223,6 @@ def initialize(config, server):
     end_digit = config.example_end_digit
     delay = config.example_delay
 
-    # Actor
-    server.add_actor(NAME, ExampleActor)
-
-    # Initialize configuration in Actor
-    server.tell_actor(NAME, {
-        'command': 'set_config',
-        'config': config,
-    })
-
     # CodeActions
     server.add_code_action(code_action_example)
 
@@ -263,7 +255,6 @@ def initialize(config, server):
         # Return null-edit immediately (the rest will stream)
         return lsp.WorkspaceEdit()
 
-
     ##############################
     # Example LSP Features
 
@@ -273,6 +264,7 @@ def initialize(config, server):
         NOTES:
         * These are not only triggered on the `trigger_character`. It's just that the `trigger_character` also works.
         '''
+        log.info('COMLETIONS STARTED')
         # Extract the line text till the position of the autocomplete trigger
         position = params.position
         uri = params.text_document.uri
@@ -350,7 +342,7 @@ def multiline(x):
         #
         # The client does it's own filtering, but it also does a fuzzy match
         # thing that means if you've typed only a few chars, many of the
-        # possible matches *will* match, but probably shouldn't
+        # possible matches *will* match, but probably shouldn't.
         filtered_completions = [item for item in possible_completions if item.label.startswith(starting_text)]
 
         return lsp.CompletionList(
@@ -433,7 +425,6 @@ def multiline(x):
     @server.feature(lsp.TEXT_DOCUMENT_CODE_LENS)
     def provide_code_lens(ls, params):
         ''' Shows an inline hyperlink that if clicked will trigger a command '''
-        log.error('CODE LENS')
         return [
             lsp.CodeLens(
                 range=lsp.Range(lsp.Position(line=10, character=5), lsp.Position(line=10, character=15)),
@@ -581,3 +572,14 @@ def multiline(x):
     server.add_code_action(create_action("Example: Report Progress", "reportProgress"))
 
     return server
+
+
+def post_initialization(config, server):
+    # Actor
+    server.add_actor(NAME, ExampleActor)
+
+    # Initialize configuration in Actor
+    server.tell_actor(NAME, {
+        'command': 'set_config',
+        'config': config,
+    })
