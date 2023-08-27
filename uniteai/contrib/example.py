@@ -114,7 +114,7 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
         try:
             # Stream the results to LSP Client
             running_text = ''
-            for x in range(self.start_digit, self.end_digit+1):
+            for x in range(self.start_digit, self.end_digit + 1):
                 # For breaking out early
                 if stop_event.is_set():
                     log.debug('STREAM_FN received STOP EVENT')
@@ -192,14 +192,14 @@ def create_action(title, cmd):
         text_document = params.text_document
         range = params.range
         return lsp.CodeAction(
-                    title=title,
-                    kind=lsp.CodeActionKind.Refactor,
-                    command=lsp.Command(
-                        title=title,
-                        command=cmd,
-                        arguments=[text_document, range]
-                    )
-                )
+            title=title,
+            kind=lsp.CodeActionKind.Refactor,
+            command=lsp.Command(
+                title=title,
+                command=cmd,
+                arguments=[text_document, range]
+            )
+        )
     return code_action_fn
 
 
@@ -416,7 +416,9 @@ def multiline(x):
         ''' NOTE: You must trigger your client to show highlights '''
         return [
             lsp.DocumentHighlight(
-                range=lsp.Range(lsp.Position(line=2, character=0), lsp.Position(line=6, character=0)),
+                range=lsp.Range(
+                    lsp.Position(line=2, character=0),
+                    lsp.Position(line=6, character=0)),
                 kind=lsp.DocumentHighlightKind.Text
             )
         ]
@@ -427,27 +429,40 @@ def multiline(x):
         ''' Shows an inline hyperlink that if clicked will trigger a command '''
         return [
             lsp.CodeLens(
-                range=lsp.Range(lsp.Position(line=10, character=5), lsp.Position(line=10, character=15)),
-                command=lsp.Command(title='My Code Lens', command='logSomething', arguments=['an argument', 'wow']),
+                range=lsp.Range(
+                    lsp.Position(line=10, character=5),
+                    lsp.Position(line=10, character=15)),
+                command=lsp.Command(
+                    title='My Code Lens',
+                    command='logSomething',
+                    arguments=['codelens called this', 'some arguments', 'wow']
+                ),
             )
         ]
 
     # Document Symbols
     @server.feature(lsp.TEXT_DOCUMENT_DOCUMENT_SYMBOL)
     def provide_symbols(ls, params):
-        ''' Symbols are like function or variable names in a document. '''
+        ''' Symbols are like function or variable names in a document.
+
+        range, aka fullRange, refers to everything related to the symbol, eg a function body.
+
+        selection_range is a subset of the fullRange, typically just the symbol name.
+        '''
         return [
             lsp.DocumentSymbol(
                 name='mySymbol1',
                 kind=lsp.SymbolKind.Function,
-                range=lsp.Range(lsp.Position(line=10, character=5), lsp.Position(line=20, character=5)),
-                selection_range=lsp.Range(lsp.Position(line=10, character=5), lsp.Position(line=10, character=15)),
+                # function body spans 2 lines
+                range=lsp.Range(lsp.Position(line=10, character=0), lsp.Position(line=12, character=0)),
+                # function symbol is within the fullRange/range, and spans 3 chars
+                selection_range=lsp.Range(lsp.Position(line=10, character=0), lsp.Position(line=10, character=3)),
             ),
             lsp.DocumentSymbol(
                 name='mySymbol2',
                 kind=lsp.SymbolKind.Function,
-                range=lsp.Range(lsp.Position(line=21, character=5), lsp.Position(line=22, character=5)),
-                selection_range=lsp.Range(lsp.Position(line=21, character=5), lsp.Position(line=22, character=15)),
+                range=lsp.Range(lsp.Position(line=13, character=0), lsp.Position(line=15, character=0)),
+                selection_range=lsp.Range(lsp.Position(line=13, character=0), lsp.Position(line=13, character=3)),
             )
         ]
 
@@ -459,7 +474,7 @@ def multiline(x):
         # user is hovering over and fetch appropriate documentation or other
         # relevant details.
         message = lsp.MarkupContent(
-            kind=lsp.MarkupKind.Markdown, # alt: MarkupKind.PlainText
+            kind=lsp.MarkupKind.Markdown,  # alt: MarkupKind.PlainText
             value="**This is hover documentation!**\n\nExample content for the hover feature."
         )
         range = lsp.Range(
@@ -467,7 +482,6 @@ def multiline(x):
             end=lsp.Position(line=params.position.line, character=params.position.character + 1)
         )
         return lsp.Hover(contents=message, range=range)
-
 
     ##############################
     # Demo LSP Commands
@@ -561,6 +575,7 @@ def multiline(x):
     @server.command("logSomething")
     async def log_something(ls, args):
         '''This is to help debug features that trigger commands, eg code lenses. '''
+        ls.show_message(f"You triggered the logSomething command: {str(args)}", lsp.MessageType.Info)
         log.info(f'logSomething log: {str(args)}')
         return []
 

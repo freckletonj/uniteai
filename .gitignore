@@ -26,3 +26,7 @@ embedding_cache/
 db.sqlite3
 *.calltree
 *.pstats
+
+
+# Editor
+setup.cfg
