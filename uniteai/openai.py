@@ -23,7 +23,6 @@ import logging
 
 from uniteai.edit import init_block, cleanup_block, BlockJob
 from uniteai.common import extract_range, find_block, mk_logger, get_nested
-from uniteai.server import Server
 
 
 ##################################################
@@ -286,7 +285,7 @@ def initialize(config, server):
     # Modify Server
     @server.thread()
     @server.command('command.openaiAutocompleteStream')
-    def openai_autocomplete_stream(ls: Server, args):
+    def openai_autocomplete_stream(ls, args):
         if len(args) != 4:
             log.error(f'command.openaiAutocompleteStream: Wrong arguments, received: {args}')
         text_document = ls.converter.structure(args[0], TextDocumentIdentifier)

@@ -6,19 +6,70 @@
 ;; `lsp-mode` excels over eglot in that you can run it in parallel alongside
 ;; other LSPs.
 
-
 (use-package lsp-mode
   :ensure t
   :commands lsp
   :hook
-  ((markdown-mode org-mode python-mode) . (lambda ()
-                                            (llm-mode 1)
-                                            (lsp)))
+  ((lambda ()
+     (dolist (hook '((markdown-mode    . markdown)
+                     (org-mode         . org)
+                     (python-mode      . python)
+                     (bibtex-mode      . bibtex)
+                     (clojure-mode     . clojure)
+                     (coffee-mode      . coffeescript)
+                     (c-mode           . c)
+                     (c++-mode         . cpp)
+                     (csharp-mode      . csharp)
+                     (css-mode         . css)
+                     (diff-mode        . diff)
+                     (dockerfile-mode  . dockerfile)
+                     (fsharp-mode      . fsharp)
+                     (go-mode          . go)
+                     (groovy-mode      . groovy)
+                     (html-mode        . html)
+                     (web-mode         . html)  ; For HTML as well
+                     (java-mode        . java)
+                     (js-mode          . javascript)
+                     (js2-mode         . javascriptreact)
+                     (json-mode        . json)
+                     (LaTeX-mode       . latex) ; Use LaTeX-mode, the AUCTeX mode for LaTeX
+                     (less-css-mode    . less)
+                     (lua-mode         . lua)
+                     (makefile-mode    . makefile)
+                     (objc-mode        . objective-c)
+                     (perl-mode        . perl)
+                     (php-mode         . php)
+                     (text-mode        . plaintext)
+                     (powershell-mode  . powershell)
+                     (ess-mode         . r)  ; ESS mode for R
+                     (ruby-mode        . ruby)
+                     (rust-mode        . rust)
+                     (scss-mode        . scss)
+                     (sass-mode        . sass)
+                     (sh-mode          . shellscript)
+                     (sql-mode         . sql)
+                     (swift-mode       . swift)
+                     (typescript-mode  . typescript)
+                     (TeX-mode         . tex)  ; For generic TeX files, it could be LaTeX or plain TeX
+                     (nxml-mode        . xml)
+                     (yaml-mode        . yaml)
+                     ;; Additional modes
+                     (sh-mode          . bash)
+                     (toml-mode        . toml)))
+       (let ((hook-symbol (car hook))
+             (mode-string (cdr hook)))
+         (when (fboundp hook-symbol)
+           (add-hook hook-symbol (lambda ()
+                                    (llm-mode 1)
+                                    (lsp))))))))
   :init
   ;; Tell lsp-mode not to ask if you're ok with the server modifying the document.
   (setq lsp-restart 'auto-restart)
   :config
-  (define-key lsp-command-map (kbd "M-'") 'lsp-execute-code-action))
+  (define-key lsp-command-map (kbd "M-'") 'lsp-execute-code-action)
+  (setq lsp-enable-suggest-server-download nil)  ; if it can't launch the right LSP, don't pester
+  )
+
 
 ;;;;;;;;;;
 

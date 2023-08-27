@@ -34,7 +34,6 @@ import yaml
 
 from uniteai.edit import init_block, cleanup_block, BlockJob
 from uniteai.common import extract_range, find_block, mk_logger, get_nested
-from uniteai.server import Server
 import uniteai.document.embed as embed
 import uniteai.document.download as download
 import traceback
@@ -264,26 +263,15 @@ def configure(config_yaml):
 
 
 def initialize(config, server):
-    # Actor
-    server.add_actor(NAME, DocumentActor)
-
     # CodeActions
     server.add_code_action(
         lambda params:
         code_action_document(params))
 
-    server.tell_actor(NAME, {
-        'command': 'set_config',
-        'config': config
-    })
-    server.tell_actor(NAME, {
-        'command': 'initialize'
-    })
-
     # Modify Server
     @server.thread()
     @server.command('command.document')
-    def document(ls: Server, args):
+    def document(ls, args):
         if len(args) != 2:
             log.error(f'command.document: Wrong arguments, received: {args}')
         text_document = ls.converter.structure(args[0], TextDocumentIdentifier)
@@ -308,3 +296,14 @@ def initialize(config, server):
 
         # Return null-edit immediately (the rest will stream)
         return WorkspaceEdit()
+
+
+def post_initialization(config, server):
+    server.add_actor(NAME, DocumentActor)
+    server.tell_actor(NAME, {
+        'command': 'set_config',
+        'config': config
+    })
+    server.tell_actor(NAME, {
+        'command': 'initialize'
+    })
