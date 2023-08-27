@@ -51,7 +51,8 @@ document_chat = [
   "InstructorEmbedding",
   "sentence-transformers",
   "pypdf",
-  "beautifulsoup4"
+  "beautifulsoup4",
+  "pandas"
 ]
 all = [
   "accelerate",
@@ -76,7 +77,8 @@ all = [
   "InstructorEmbedding",
   "sentence-transformers",
   "pypdf",
-  "beautifulsoup4"
+  "beautifulsoup4",
+  "pandas"
 ]
 
 

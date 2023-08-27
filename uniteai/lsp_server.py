@@ -29,6 +29,7 @@ import importlib
 import time
 import asyncio
 from functools import partial
+import sys
 
 NAME = 'lsp_server'
 log = mk_logger(NAME, logging.INFO)
@@ -264,7 +265,7 @@ def initialize(args, config_yaml):
 def main():
     # First pass at configuration. Further passes will pick up config
     # per-feature.
-    args, config_yaml, parser = config.get_args()
+    args, config_yaml, parser = config.fetch_config()
     server = initialize(args, config_yaml)
 
     # Server features must be registered to the server before connecting. IE you
@@ -282,7 +283,6 @@ def main():
     elif args.stdio:
         logging.info('Starting on STDIO')
         server.start_io()
-
 
 if __name__ == '__main__':
     main()
