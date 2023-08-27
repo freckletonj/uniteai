@@ -72,13 +72,13 @@ brew install portaudio
 sudo apt install portaudio19-dev
 ```
 
-3.) Get: `uniteai_lsp`, build a config.
+3.) Install `UniteAI`.
 
 ```sh
-pip3 install --user "uniteai[all]" # install deps for all features
+pip3 install --user "uniteai[all]"  # install deps for all features
 ```
 
-Make sure you add your python installations `bin/` to your system `PATH` environment variable. This allows your terminal to find the `uniteai_lsp` binary you just installed:
+Your editor will make use of the installed binary, it so it needs to be on your `PATH`. Add your python installations `bin/` to your system `PATH` environment variable.
 
 ```sh
 # Linux and Mac
@@ -88,21 +88,12 @@ Make sure you add your python installations `bin/` to your system `PATH` environ
 C:\Users\USERNAME\AppData\Roaming\Python\PythonXX\Scripts\
 ```
 
-And try running it!
-
-```sh
-uniteai_lsp                        # on mac, this may only appear if you open a new terminal
-cat .uniteai.yml                   # checkout the config
-
-# if you want global config (unnecessary, but you probably do,
-# otherwise it just searches your current dir):
-mv .uniteai.yml ~/
-```
-
-It will prompt if it should make a default `.uniteai.yml` config for you. Update your preferences, including your OpenAI API key if you want that, and which local language model or transcription models you want.
+`uniteai_lsp` should now be callable from a fresh terminal (but you will never need to call it yourself).
 
 
-4.) *Optional:* Then start the longlived LLM server which offers your editor a connection to your local large language model.
+4.) *Optional:* Start the longlived LLM server which offers your editor a connection to your local large language model.
+
+The editor will not start up the LLM itself, so you can just run this from anywhere, and the editor will connect to it.
 
 ```sh
 uniteai_llm
@@ -133,11 +124,20 @@ uniteai_llm
 
 * For other editors with LSP support (most do), we just need to copy the [emacs/vscode configuration](./clients), and translate it to your editor. Please submit a PR with new editor configs!
 
+
+6.) **Config:**
+
+When you first open a compatible file in your editor, the LSP will start.
+
+It will prompt you to create a config file in your local dir, or your home dir.
+
+You will need to edit this file, and then restart your editor.
+
+
+
 ## Granular installs
 
 If you did `pip install "uniteai[all]"`, ignore this section!
-
-Still refer to the Quickstart section for the main workflow, such as calling `uniteai_lsp` to get your default config made.
 
 Your config determines what modules/features are loaded.
 
@@ -186,8 +186,10 @@ Your client configuration determines this, so if you are using the example clien
 
 * `Ctrl-Alt-d` on ubuntu means defaults to "minimize all windows". You can [disable](https://askubuntu.com/a/177994/605552) that.
 
+* `Cmd-Alt-d`on Mac does something else too, so, we should revisit default bindings.
 
-# "Neural" Document Lookup
+
+# Retreival Augmented Generation (RAG)
 
 For the `document` feature, you can reference one of multiple document types, and lookup passages with a similar "gist" to them (semantic similarity search).
 
