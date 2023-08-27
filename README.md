@@ -42,6 +42,8 @@ And **close to the code** (It's easy to tweak and add features. All the logic ha
 
 ### Document Chat (***NEW***)
 
+aka *Retrieval Augmented Generation*
+
 [screencast_document_chat.webm](https://github.com/freckletonj/uniteai/assets/8399149/b20eea79-431e-44bb-b782-24c57edc1b88)
 
 
