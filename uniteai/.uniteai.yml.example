@@ -98,7 +98,8 @@ local_llm:
   # model_name_or_path: '/home/me/path/to/falcon-7b-instruct/'
   # model_name_or_path: 't5-base'
   model_name_or_path: 'google/flan-t5-large'
-  model_commit: 'Unfortunately, Transformers doesnt actually dbl check this (at least for Falcon), but should.'
+  model_commit: '<the commit hash>'
+  device_map: 'auto'
 
   # Falcon params
   max_length: 1000
