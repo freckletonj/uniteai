@@ -30,17 +30,47 @@ from sklearn.metrics.pairwise import cosine_similarity
 from umap import UMAP
 import random
 
-SEED = 42
+SEED = 43
 np.random.seed(SEED)
 random.seed(SEED)
 
 print()
+
+
 def safe_div(numerator, denominator, epsilon=1e-9):
     """Safely divide two numbers."""
     sign = np.sign(denominator)
     return numerator / (denominator + epsilon * sign)
 
+
 class WhiteningK:
+    def __init__(self, k=None):
+        self.bias = None
+        self.kernel = None
+        self.k = k
+
+    def fit(self, X):
+        N = len(X)
+        self.bias = np.mean(X, axis=0)
+        cov_matrix = np.cov(X, rowvar=False)
+        U, Lambda, _ = np.linalg.svd(cov_matrix)
+        # self.kernel = U @ np.sqrt(np.linalg.inv(np.diag(Lambda)))
+        self.kernel = U @ np.sqrt(np.linalg.pinv(np.diag(Lambda)))
+
+        if self.k is not None:
+            self.kernel = self.kernel[:, :self.k]
+            self.bias = self.bias
+
+    def transform(self, X):
+        return (X - self.bias) @ self.kernel
+
+    def fit_transform(self, X):
+        """Fit to the data, then transform it."""
+        self.fit(X)
+        return self.transform(X)
+
+
+class DONTUSE_2_WhiteningK:
     def __init__(self, k=None, epsilon=1e-5):
         self.kernel = None
         self.bias = None
@@ -89,7 +119,7 @@ class WhiteningK:
         return self.transform(vecs)
 
 
-class DONTUSE_WhiteningK:
+class DONTUSE_1_WhiteningK:
     def __init__(self, k, epsilon=1e-0):
         self.k = k
         self.bias = None
