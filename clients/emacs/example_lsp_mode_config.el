@@ -10,65 +10,65 @@
   :ensure t
   :commands lsp
   :hook
-  ((lambda ()
-     (dolist (hook '((markdown-mode    . markdown)
-                     (org-mode         . org)
-                     (python-mode      . python)
-                     (bibtex-mode      . bibtex)
-                     (clojure-mode     . clojure)
-                     (coffee-mode      . coffeescript)
-                     (c-mode           . c)
-                     (c++-mode         . cpp)
-                     (csharp-mode      . csharp)
-                     (css-mode         . css)
-                     (diff-mode        . diff)
-                     (dockerfile-mode  . dockerfile)
-                     (fsharp-mode      . fsharp)
-                     (go-mode          . go)
-                     (groovy-mode      . groovy)
-                     (html-mode        . html)
-                     (web-mode         . html)  ; For HTML as well
-                     (java-mode        . java)
-                     (js-mode          . javascript)
-                     (js2-mode         . javascriptreact)
-                     (json-mode        . json)
-                     (LaTeX-mode       . latex) ; Use LaTeX-mode, the AUCTeX mode for LaTeX
-                     (less-css-mode    . less)
-                     (lua-mode         . lua)
-                     (makefile-mode    . makefile)
-                     (objc-mode        . objective-c)
-                     (perl-mode        . perl)
-                     (php-mode         . php)
-                     (text-mode        . plaintext)
-                     (powershell-mode  . powershell)
-                     (ess-mode         . r)  ; ESS mode for R
-                     (ruby-mode        . ruby)
-                     (rust-mode        . rust)
-                     (scss-mode        . scss)
-                     (sass-mode        . sass)
-                     (sh-mode          . shellscript)
-                     (sql-mode         . sql)
-                     (swift-mode       . swift)
-                     (typescript-mode  . typescript)
-                     (TeX-mode         . tex)  ; For generic TeX files, it could be LaTeX or plain TeX
-                     (nxml-mode        . xml)
-                     (yaml-mode        . yaml)
-                     ;; Additional modes
-                     (sh-mode          . bash)
-                     (toml-mode        . toml)))
-       (let ((hook-symbol (car hook))
-             (mode-string (cdr hook)))
-         (when (fboundp hook-symbol)
-           (add-hook hook-symbol (lambda ()
-                                    (llm-mode 1)
-                                    (lsp))))))))
+  ((LaTeX-mode
+    TeX-mode
+    bibtex-mode
+    c++-mode
+    c-mode
+    clojure-mode
+    coffee-mode
+    csharp-mode
+    css-mode
+    diff-mode
+    dockerfile-mode
+    ess-mode
+    emacs-lisp-mode
+    fsharp-mode
+    go-mode
+    groovy-mode
+    html-mode
+    java-mode
+    js-mode
+    js2-mode
+    json-mode
+    less-css-mode
+    lua-mode
+    makefile-mode
+    markdown-mode
+    nxml-mode
+    objc-mode
+    org-mode
+    perl-mode
+    php-mode
+    powershell-mode
+    python-mode
+    ruby-mode
+    rust-mode
+    sass-mode
+    scss-mode
+    sh-mode
+    sql-mode
+    swift-mode
+    text-mode
+    toml-mode
+    typescript-mode
+    web-mode
+    yaml-mode
+    ) . (lambda ()
+          (uniteai-mode 1)
+          (lsp)))
+
   :init
   ;; Tell lsp-mode not to ask if you're ok with the server modifying the document.
   (setq lsp-restart 'auto-restart)
+
   :config
-  (define-key lsp-command-map (kbd "M-'") 'lsp-execute-code-action)
-  (setq lsp-enable-suggest-server-download nil)  ; if it can't launch the right LSP, don't pester
-  )
+  ;; if it can't launch the right LSP, don't pester
+  (setq lsp-enable-suggest-server-download nil)
+
+  :bind
+  ;; Code Actions
+  ("M-'" . lsp-execute-code-action))
 
 
 ;;;;;;;;;;
@@ -150,42 +150,63 @@
                    :arguments ,(vector doc range "FROM_CONFIG_CHAT" "FROM_CONFIG")))))
 
 
+;; Local LLM
+(defun lsp-text-to-speech-save ()
+  (interactive)
+  (unless (region-active-p)
+    (error "No region selected"))
+  (let* ((doc (lsp--text-document-identifier))
+         (range (list :start (lsp--point-to-position (region-beginning))
+                      :end (lsp--point-to-position (region-end)))))
+    (lsp-request "workspace/executeCommand"
+                 `(:command "command.textToSpeechSave"
+                    :arguments ,(vector doc range)))))
 
-(define-minor-mode llm-mode
-  "Minor mode for interacting with LLM server."
-  :lighter " LLM"
+;; Local LLM
+(defun lsp-text-to-speech-play ()
+  (interactive)
+  (unless (region-active-p)
+    (error "No region selected"))
+  (let* ((doc (lsp--text-document-identifier))
+         (range (list :start (lsp--point-to-position (region-beginning))
+                      :end (lsp--point-to-position (region-end)))))
+    (lsp-request "workspace/executeCommand"
+                 `(:command "command.textToSpeechPlay"
+                    :arguments ,(vector doc range)))))
+
+
+(define-minor-mode uniteai-mode
+  "Minor mode for interacting with UniteAI server."
+  :lighter " UniteAI"
   :keymap (let ((map (make-sparse-keymap)))
             (define-key map (kbd "C-c l s") 'lsp-stop)
-
             (define-key map (kbd "C-c l e") 'lsp-example-counter)
-
             (define-key map (kbd "C-c l l") 'lsp-local-llm)
-
+            (define-key map (kbd "C-c l g") 'lsp-openai-gpt)
             (define-key map (kbd "C-c l v") 'lsp-transcribe)
-
             (define-key map (kbd "C-c l g") 'lsp-openai-gpt)
             (define-key map (kbd "C-c l c") 'lsp-openai-chatgpt)
-
             (define-key map (kbd "C-c l d") 'lsp-document)
+
+            (define-key map (kbd "C-c l a s") 'lsp-text-to-speech-save)
+            (define-key map (kbd "C-c l a p") 'lsp-text-to-speech-play)
             map))
 
-;; set debug logs, but slows it down
-(setq lsp-log-io t)
-
 (lsp-register-client
- (make-lsp-client :new-connection (lsp-stdio-connection "uniteai_lsp --stdio")
-                  :major-modes '(python-mode markdown-mode org-mode)
-                  :server-id 'llm-lsp
-                  :priority -2
-                  :add-on? t  ; run in parallel to other LSPs
-                  ))
+ (make-lsp-client
 
-(lsp-register-client
- (make-lsp-client :new-connection (lsp-tcp-connection
-                                   (lambda (port)
-                                     `("uniteai_lsp" "--tcp" "--lsp_port" ,(number-to-string port))))
-                  :priority -3
-                  :major-modes '(python-mode markdown-mode org-mode)
-                  :server-id 'llm-lsp-tcp
-                  :add-on? t  ; run in parallel to other LSPs
-                  ))
+  ;; STDIO Mode
+  :new-connection (lsp-stdio-connection `("uniteai_lsp" "--stdio"))
+
+  ;; ;; TCP Mode
+  ;; :new-connection (lsp-tcp-connection
+  ;;                  (lambda (port)
+  ;;                    `("uniteai_lsp" "--tcp" "--lsp_port" ,(number-to-string port))))
+
+  :priority -3
+  :major-modes '(python-mode markdown-mode org-mode)
+  :server-id 'uniteai
+  :add-on? t  ; run in parallel to other LSPs
+  ))
+
+(setq lsp-tcp-connection-timeout 5.0)  ; default was 2.0
