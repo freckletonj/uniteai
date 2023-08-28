@@ -97,8 +97,8 @@ local_llm:
   host: 'localhost'
   # model_name_or_path: '/home/me/path/to/falcon-7b-instruct/'
   # model_name_or_path: 't5-base'
-  model_name_or_path: 'google/flan-t5-large'
-  model_commit: '<the commit hash>'
+  model_name_or_path: 'codellama/CodeLlama-7b-Python-hf'
+  model_commit: '51955db0c7f350e799b6cd837e4974017761d79a'
   device_map: 'auto'
 
   # Falcon params
