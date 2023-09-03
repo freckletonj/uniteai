@@ -29,7 +29,7 @@ local_llm = [
   "einops",
   "fastapi",
   "scipy",
-  "transformers",
+  { git = "https://github.com/huggingface/transformers.git", rev = "0afa5071bd84e44301750fdc594e33db102cf374" },
   "uvicorn",
   "sentencepiece",
 ]
