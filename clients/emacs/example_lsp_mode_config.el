@@ -182,7 +182,6 @@
             (define-key map (kbd "C-c l s") 'lsp-stop)
             (define-key map (kbd "C-c l e") 'lsp-example-counter)
             (define-key map (kbd "C-c l l") 'lsp-local-llm)
-            (define-key map (kbd "C-c l g") 'lsp-openai-gpt)
             (define-key map (kbd "C-c l v") 'lsp-transcribe)
             (define-key map (kbd "C-c l g") 'lsp-openai-gpt)
             (define-key map (kbd "C-c l c") 'lsp-openai-chatgpt)
