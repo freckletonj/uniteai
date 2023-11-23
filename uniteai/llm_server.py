@@ -2,10 +2,9 @@
 
 Launch an LLM locally, and serve it.
 
-
 ----------
 RUN:
-    uvicorn llm_server:app --port 8000
+    uvicorn uniteai.llm_server:app --port 8000
 
 
 ----------
@@ -38,40 +37,57 @@ endpoint:
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
-from transformers import (
-    AutoTokenizer,
-    AutoModelForCausalLM,
-    TextIteratorStreamer,
-    T5Tokenizer,
-    T5ForConditionalGeneration,
-)
 from transformers.generation import StoppingCriteriaList
 from typing import List
 import threading
 import torch
-import multiprocessing as mp
+# import multiprocessing as mp
 from uniteai.common import get_nested
 from uniteai.config import load_config
 import uvicorn
+from transformers import TextIteratorStreamer
+import transformers
+import ctransformers
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'  # note: this isn't relevant to ctransformers
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 ##################################################
-# `transformers`
-
+# Load Model
 
 def load_model(args):
     name_or_path = args['model_name_or_path']
+    print(f'Loading model: {name_or_path}')
 
     # T5
     if 't5' in name_or_path:
+        from transformers import (
+            T5Tokenizer,
+            T5ForConditionalGeneration,
+        )
         tokenizer = T5Tokenizer.from_pretrained(name_or_path)
         model = T5ForConditionalGeneration.from_pretrained(name_or_path, device_map='auto')
         return tokenizer, model
 
-    # AutoModelForCausalLM (should support many models)
+    # GGUF
+    elif 'gguf' in name_or_path:
+        from ctransformers import AutoModelForCausalLM
+        from transformers import AutoTokenizer
+
+        model = AutoModelForCausalLM.from_pretrained(
+            name_or_path,
+            hf=True  # Quirk: hf=True needs to be set for the next line (tokenizer) to work
+        )
+        # tokenizer = AutoTokenizer.from_pretrained(model)
+        tokenizer = AutoTokenizer.from_pretrained('HuggingFaceH4/zephyr-7b-beta')  # TODO: hardcoded
+        return tokenizer, model
+
+    # Transformers (should support many models)
     else:
+        from transformers import (
+            AutoTokenizer,
+            AutoModelForCausalLM,
+        )
         tokenizer = AutoTokenizer.from_pretrained(
             name_or_path,
         )
@@ -90,6 +106,10 @@ def load_model(args):
             **load_in_4bit,
         )
         return tokenizer, model
+
+
+def is_ctransformers(model):
+    return isinstance(model, ctransformers.transformers.CTransformersModel)
 
 
 ##################################################
@@ -116,7 +136,6 @@ class AutocompleteResponse(BaseModel):
 
 app = FastAPI()
 
-
 @app.on_event("startup")
 def initialize_model():
     global tokenizer, model
@@ -127,7 +146,8 @@ def initialize_model():
 # Local LLM
 
 # for early termination of streaming
-local_llm_stop_event = mp.Event()
+# local_llm_stop_event = mp.Event()
+local_llm_stop_event = threading.Event()
 
 # when streaming, a chunk must end in newline
 STREAM_TOK = '\n'
@@ -144,10 +164,18 @@ def local_llm_stream_(request, streamer, local_llm_stop_event):
         custom_stopping_criteria(local_llm_stop_event)
     ])
 
-    toks = tokenizer([request.text], return_tensors='pt').to(device)
+    if is_ctransformers(model):
+        toks = tokenizer([request.text], return_tensors='pt')
+        input_ids = toks.input_ids
+        attention_mask = toks.attention_mask
+    else:
+        toks = tokenizer([request.text], return_tensors='pt')
+        input_ids = toks.input_ids.to(device)
+        attention_mask = toks.attention_mask.to(device)
+
     generation_kwargs = dict(
-        inputs=toks.input_ids.to(device),
-        attention_mask=toks.attention_mask,
+        inputs=input_ids,
+        attention_mask=attention_mask,
         streamer=streamer,
         max_length=request.max_length,
         do_sample=request.do_sample,
@@ -163,10 +191,7 @@ def local_llm_stream_(request, streamer, local_llm_stop_event):
     try:
         model.generate(**generation_kwargs)  # blocks
     except RuntimeError as e:
-        # NOTE: Falcon randomly produces errors like:
-        #       mat1 and mat2 shapes cannot be multiplied
-        streamer.on_finalized_text(f'\n<LLM SERVER ERROR: {e}>',
-                                   stream_end=True)
+        streamer.on_finalized_text(f'\n<LLM SERVER ERROR: {e}>', stream_end=True)
     print('DONE GENERATING')
 
 
@@ -186,6 +211,8 @@ def stream_results(streamer):
 @app.post("/local_llm_stream", response_model=List[AutocompleteResponse])
 def local_llm_stream(request: AutocompleteRequest):
     ''' Stream the response as the model generates it. '''
+    global local_llm_stop_event
+
     local_llm_stop_event.clear()
     streamer = TextIteratorStreamer(
         tokenizer,
