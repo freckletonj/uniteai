@@ -192,7 +192,7 @@ def openai_stream_fn(uri, prompt, engine, max_length, stop_event, edits):
                 uri=uri,
                 start_tag=START_TAG,
                 end_tag=END_TAG,
-                text=f'\n{running_text}\n',
+                text=f'{running_text}',
                 strict=False,
             )
             edits.add_job(NAME, job)
@@ -205,7 +205,7 @@ def openai_stream_fn(uri, prompt, engine, max_length, stop_event, edits):
             uri=uri,
             start_tag=START_TAG,
             end_tag=END_TAG,
-            text=f'\n{running_text}\n',
+            text=f'{running_text}',
             strict=True,
         )
         edits.add_job(NAME, job)
