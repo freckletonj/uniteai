@@ -4,8 +4,9 @@ Launch an LLM locally, and serve it.
 
 ----------
 RUN:
+    uniteai_llm
+      # or
     uvicorn uniteai.llm_server:app --port 8000
-
 
 ----------
 
@@ -46,10 +47,12 @@ from uniteai.common import get_nested
 from uniteai.config import load_config
 import uvicorn
 from transformers import TextIteratorStreamer
-import transformers
-import ctransformers
+import llama_cpp
+import queue
+import time
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'  # note: this isn't relevant to ctransformers
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'  # note: this isn't relevant to GGUF models
 
 
 ##################################################
@@ -71,15 +74,12 @@ def load_model(args):
 
     # GGUF
     elif 'gguf' in name_or_path:
-        from ctransformers import AutoModelForCausalLM
-        from transformers import AutoTokenizer
-
-        model = AutoModelForCausalLM.from_pretrained(
-            name_or_path,
-            hf=True  # Quirk: hf=True needs to be set for the next line (tokenizer) to work
+        from llama_cpp import Llama
+        model = Llama(
+            model_path=name_or_path,
+            verbose=False
         )
-        # tokenizer = AutoTokenizer.from_pretrained(model)
-        tokenizer = AutoTokenizer.from_pretrained('HuggingFaceH4/zephyr-7b-beta')  # TODO: hardcoded
+        tokenizer = None
         return tokenizer, model
 
     # Transformers (should support many models)
@@ -106,10 +106,6 @@ def load_model(args):
             **load_in_4bit,
         )
         return tokenizer, model
-
-
-def is_ctransformers(model):
-    return isinstance(model, ctransformers.transformers.CTransformersModel)
 
 
 ##################################################
@@ -153,25 +149,94 @@ local_llm_stop_event = threading.Event()
 STREAM_TOK = '\n'
 
 
-def local_llm_stream_(request, streamer, local_llm_stop_event):
-    def custom_stopping_criteria(local_llm_stop_event):
+####################
+# llama-cpp-python
+
+class QueueIterator:
+    ''' Allow a separate thread to fill a queue, and turn it into a nice
+    iterator to behave like transformer's TextIteratorStreamer. This queue can
+    be stopped by `put`ting a `None` on it.'''
+
+    def __init__(self):
+        self.queue = queue.Queue()
+
+    def __iter__(self):
+        return self
+
+    def put(self, text):
+        self.queue.put(text)
+
+    # def __next__(self):
+    #     item = self.queue.get()
+
+    #     # Stop signal received
+    #     if item is None:
+    #         raise StopIteration
+
+    #     return item
+
+    def __next__(self):
+        try:
+            # Non-blocking get with a short timeout
+            item = self.queue.get_nowait()
+
+            # Stop signal received
+            if item is None:
+                raise StopIteration
+            return item
+        except queue.Empty:
+            # If the queue is empty, check again
+
+            # TODO: this can reach a python recursion limit. Perhaps we should
+            #       just return '' if nothing received? Or use a blocking `get`?
+            time.sleep(0.05)
+            return self.__next__()
+
+
+def llama_cpp_stream_(request, streamer, local_llm_stop_event):
+    def custom_stopping_criteria(stop_event):
         def f(input_ids: torch.LongTensor,
               score: torch.FloatTensor,
               **kwargs) -> bool:
-            return local_llm_stop_event.is_set()
+            global local_llm_stop_event
+            return stop_event.is_set()
+        return f
+    stopping_criteria = llama_cpp.StoppingCriteriaList([
+        custom_stopping_criteria(local_llm_stop_event)
+    ])
+
+    stream = model(
+        request.text,
+        max_tokens=128,
+        stream=True,
+        echo=False,  # echo the prompt back as output
+        stopping_criteria=stopping_criteria,
+    )
+
+    for output in stream:
+        if output['choices'][0]['finish_reason'] == 'stop':
+            streamer.put(None)
+        else:
+            streamer.put(output['choices'][0]['text'])
+
+
+####################
+# Transformers
+
+def transformer_stream_(request, streamer, local_llm_stop_event):
+    def custom_stopping_criteria(stop_event):
+        def f(input_ids: torch.LongTensor,
+              score: torch.FloatTensor,
+              **kwargs) -> bool:
+            return stop_event.is_set()
         return f
     stopping_criteria = StoppingCriteriaList([
         custom_stopping_criteria(local_llm_stop_event)
     ])
 
-    if is_ctransformers(model):
-        toks = tokenizer([request.text], return_tensors='pt')
-        input_ids = toks.input_ids
-        attention_mask = toks.attention_mask
-    else:
-        toks = tokenizer([request.text], return_tensors='pt')
-        input_ids = toks.input_ids.to(device)
-        attention_mask = toks.attention_mask.to(device)
+    toks = tokenizer([request.text], return_tensors='pt')
+    input_ids = toks.input_ids.to(device)
+    attention_mask = toks.attention_mask.to(device)
 
     generation_kwargs = dict(
         inputs=input_ids,
@@ -195,18 +260,38 @@ def local_llm_stream_(request, streamer, local_llm_stop_event):
     print('DONE GENERATING')
 
 
-def stream_results(streamer):
+####################
+# Choose model setup based on model type
+
+def stream_model_setup(model):
+    '''The model is globally available.'''
+    if isinstance(model, llama_cpp.llama.Llama):
+        streamer = QueueIterator()
+        return streamer, llama_cpp_stream_
+
+    else:
+        streamer = TextIteratorStreamer(
+            tokenizer,
+            skip_special_tokens=True  # eg <|endoftext|>
+        )
+        return streamer, transformer_stream_
+
+
+def stream_results(streamer, stop_event):
     for x in streamer:
         # Stream response, and stop early if requested
-        if not local_llm_stop_event.is_set():
+        if not stop_event.is_set():
             print(f'yield: {x}')
             yield (
                 AutocompleteResponse(generated_text=x).json() + STREAM_TOK
             ).encode('utf-8')
         else:
-            print('STOP WAS SET')
+            # print('STOP WAS SET')
             break
 
+
+##################################################
+#
 
 @app.post("/local_llm_stream", response_model=List[AutocompleteResponse])
 def local_llm_stream(request: AutocompleteRequest):
@@ -214,11 +299,9 @@ def local_llm_stream(request: AutocompleteRequest):
     global local_llm_stop_event
 
     local_llm_stop_event.clear()
-    streamer = TextIteratorStreamer(
-        tokenizer,
-        skip_special_tokens=True  # eg <|endoftext|>
-    )
-    threading.Thread(target=local_llm_stream_,
+    streamer, stream_fn = stream_model_setup(model)
+
+    threading.Thread(target=stream_fn,
                      args=(
                          request,
                          streamer,
@@ -227,7 +310,7 @@ def local_llm_stream(request: AutocompleteRequest):
 
     try:
         return StreamingResponse(
-            stream_results(streamer),
+            stream_results(streamer, local_llm_stop_event),
             media_type="application/json"
         )
     except Exception as e:

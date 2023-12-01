@@ -112,6 +112,15 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
         if self.current_future:
             self.current_future.result()  # block, wait to finish
             self.current_future = None
+
+        # Tell backend to stop
+        response = requests.post(f"{self.llm_uri}/local_llm_stream_stop")
+        if response.status_code != 200:
+            raise Exception(
+                f"POST request to {self.llm_uri}/local_llm_stream_stop failed with status code "
+                f"{response.status_code}"
+            )
+
         log.debug('FINALLY STOPPED')
 
     def local_llm_stream_fn(self, uri, prompt, stop_event, edits):

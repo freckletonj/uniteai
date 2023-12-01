@@ -30,7 +30,7 @@ local_llm = [
   "fastapi",
   "scipy",
   "transformers",
-  "ctransformers",
+  "llama-cpp-python",
   "uvicorn",
   "sentencepiece",
 ]
@@ -62,7 +62,7 @@ all = [
   "fastapi",
   "scipy",
   "transformers",
-  "ctransformers",
+  "llama-cpp-python",
   "uvicorn",
   "sentencepiece",
 
