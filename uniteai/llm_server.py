@@ -42,7 +42,6 @@ from transformers.generation import StoppingCriteriaList
 from typing import List
 import threading
 import torch
-# import multiprocessing as mp
 from uniteai.common import get_nested
 from uniteai.config import load_config
 import uvicorn
@@ -72,8 +71,10 @@ def load_model(args):
         model = T5ForConditionalGeneration.from_pretrained(name_or_path, device_map='auto')
         return tokenizer, model
 
-    # GGUF
-    elif 'gguf' in name_or_path:
+    # Llama-CPP-Python: GGUF, GPTQ, AWQ
+    elif ('gguf' in name_or_path.lower() or
+          'gptq' in name_or_path.lower() or
+          'awq' in name_or_path.lower()):
         from llama_cpp import Llama
         model = Llama(
             model_path=name_or_path,
@@ -142,7 +143,6 @@ def initialize_model():
 # Local LLM
 
 # for early termination of streaming
-# local_llm_stop_event = mp.Event()
 local_llm_stop_event = threading.Event()
 
 # when streaming, a chunk must end in newline
@@ -166,31 +166,14 @@ class QueueIterator:
     def put(self, text):
         self.queue.put(text)
 
-    # def __next__(self):
-    #     item = self.queue.get()
-
-    #     # Stop signal received
-    #     if item is None:
-    #         raise StopIteration
-
-    #     return item
-
     def __next__(self):
-        try:
-            # Non-blocking get with a short timeout
-            item = self.queue.get_nowait()
+        item = self.queue.get()
 
-            # Stop signal received
-            if item is None:
-                raise StopIteration
-            return item
-        except queue.Empty:
-            # If the queue is empty, check again
+        # Stop signal received
+        if item is None:
+            raise StopIteration
 
-            # TODO: this can reach a python recursion limit. Perhaps we should
-            #       just return '' if nothing received? Or use a blocking `get`?
-            time.sleep(0.05)
-            return self.__next__()
+        return item
 
 
 def llama_cpp_stream_(request, streamer, local_llm_stop_event):

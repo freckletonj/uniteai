@@ -162,7 +162,7 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
                     uri=uri,
                     start_tag=START_TAG,
                     end_tag=END_TAG,
-                    text=f'\n{running_text}\n',
+                    text=f'{running_text}',
                     strict=False,
                 )
                 edits.add_job(NAME, job)
@@ -176,7 +176,7 @@ job_thread alive: {edits.job_thread.is_alive() if edits and edits.job_thread els
                 uri=uri,
                 start_tag=START_TAG,
                 end_tag=END_TAG,
-                text=f'\n{running_text}\n',
+                text=f'{running_text}',
                 strict=True,
             )
             edits.add_job(NAME, job)

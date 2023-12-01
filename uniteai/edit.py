@@ -214,7 +214,11 @@ def _attempt_insert_job(ls: LanguageServer, job: InsertJob):
 
         version = doc.version
         log.debug(f'INSERT: uri={job.uri}, doc={doc}, version={version}')
-        position = Position(job.line, job.column)
+
+        if job.column == -1:
+            position = Position(job.line, 10000)  # should place at end of line (ie not add a whole bunch of spaces)
+        else:
+            position = Position(job.line, job.column)
         edit = workspace_edit(job.uri,
                               version,
                               position,
@@ -354,12 +358,12 @@ def init_block(edit_name,
     elif isinstance(range_or_pos, Position):
         range = Range(start=range_or_pos, end=range_or_pos)
 
-    tags = '\n'.join(tags)
+    tags = ' '.join(tags)
     job = InsertJob(
         uri=uri,
         text=tags,
-        line=range.end.line+1,
-        column=0,
+        line=range.end.line,
+        column=-1,
         strict=True,
     )
     edits.add_job(edit_name, job)
