@@ -150,19 +150,19 @@ def openai_autocomplete(engine, text, max_length):
     ''' Stream responses from OpenAI's API as a generator. '''
     if engine in COMPLETION_ENGINES:
         response = openai.Completion.create(
-          engine=engine,
-          prompt=text,
-          max_tokens=max_length,
-          stream=True
+            engine=engine,
+            prompt=text,
+            max_tokens=max_length,
+            stream=True
         )
         for message in response:
             generated_text = message['choices'][0]['text']
             yield generated_text
     elif engine in CHAT_ENGINES:
         response = openai.ChatCompletion.create(
-          model=engine,
-          messages=[{"role": "user", "content": text}],
-          stream=True
+            model=engine,
+            messages=[{"role": "user", "content": text}],
+            stream=True
         )
         for message in response:
             # different json structure than completion endpoint
@@ -192,7 +192,7 @@ def openai_stream_fn(uri, prompt, engine, max_length, stop_event, edits):
                 uri=uri,
                 start_tag=START_TAG,
                 end_tag=END_TAG,
-                text=f'\n{running_text}\n',
+                text=f'{running_text}',
                 strict=False,
             )
             edits.add_job(NAME, job)
@@ -205,7 +205,7 @@ def openai_stream_fn(uri, prompt, engine, max_length, stop_event, edits):
             uri=uri,
             start_tag=START_TAG,
             end_tag=END_TAG,
-            text=f'\n{running_text}\n',
+            text=f'{running_text}',
             strict=True,
         )
         edits.add_job(NAME, job)
