@@ -98,6 +98,16 @@ def load_model(args):
         load_in_4bit = {'load_in_4bit': args['load_in_4bit']} if 'load_in_4bit' in args else {}
         trust_remote_code = {'trust_remote_code': args['trust_remote_code']} if 'trust_remote_code' in args else {}
 
+        if 'torch_dtype' in args:
+            ty_arg = args['torch_dtype']
+            if ty_arg in {'float16', 'torch.float16'}:
+                torch_dtype = {'torch_dtype': torch.float16}
+            elif ty_arg in {'bf16', 'torch.bf16, bfloat16, torch.bfloat16'}:
+                torch_dtype = {'torch_dtype': torch.bfloat16}
+            else:
+                torch_dtype = {}
+
+
         model = AutoModelForCausalLM.from_pretrained(
             pretrained_model_name_or_path=name_or_path,
             **trust_remote_code,  # needed by eg Falcon, and MosaicML
@@ -105,6 +115,7 @@ def load_model(args):
             **device_map,
             **load_in_8bit,
             **load_in_4bit,
+            **torch_dtype,
         )
         return tokenizer, model
 
@@ -255,7 +266,8 @@ def stream_model_setup(model):
     else:
         streamer = TextIteratorStreamer(
             tokenizer,
-            skip_special_tokens=True  # eg <|endoftext|>
+            skip_special_tokens=True,  # eg <|endoftext|>
+            skip_prompt=True,  # don't return prompt
         )
         return streamer, transformer_stream_
 
