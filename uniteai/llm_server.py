@@ -201,14 +201,14 @@ def llama_cpp_stream_(request, streamer, local_llm_stop_event):
 
     stream = model(
         request.text,
-        max_tokens=128,
+        max_tokens=200,
         stream=True,
         echo=False,  # echo the prompt back as output
         stopping_criteria=stopping_criteria,
     )
 
     for output in stream:
-        if output['choices'][0]['finish_reason'] == 'stop':
+        if output['choices'][0]['finish_reason'] in {'stop', 'length'}:
             streamer.put(None)
         else:
             streamer.put(output['choices'][0]['text'])
