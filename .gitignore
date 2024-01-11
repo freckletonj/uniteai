@@ -16,8 +16,10 @@ node_modules/
 
 
 # Misc
-test.md
-test.txt
+/test*.md
+/test*.txt
+/test*.py
+/sandbox
 *.log
 debug_transcription.wav
 t12_outputs

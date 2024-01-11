@@ -49,7 +49,7 @@ from transformers import TextIteratorStreamer
 import llama_cpp
 import queue
 import time
-
+import traceback
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'  # note: this isn't relevant to GGUF models
 
@@ -78,7 +78,8 @@ def load_model(args):
         from llama_cpp import Llama
         model = Llama(
             model_path=name_or_path,
-            verbose=False
+            verbose=False,
+            n_ctx=2048,
         )
         tokenizer = None
         return tokenizer, model
@@ -201,7 +202,8 @@ def llama_cpp_stream_(request, streamer, local_llm_stop_event):
 
     stream = model(
         request.text,
-        max_tokens=200,
+        # max_tokens=200,
+        max_tokens=999999999,
         stream=True,
         echo=False,  # echo the prompt back as output
         stopping_criteria=stopping_criteria,
@@ -250,6 +252,7 @@ def transformer_stream_(request, streamer, local_llm_stop_event):
     try:
         model.generate(**generation_kwargs)  # blocks
     except RuntimeError as e:
+        traceback.print_exc()
         streamer.on_finalized_text(f'\n<LLM SERVER ERROR: {e}>', stream_end=True)
     print('DONE GENERATING')
 
