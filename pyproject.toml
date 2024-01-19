@@ -33,6 +33,7 @@ local_llm = [
   "llama-cpp-python",
   "uvicorn",
   "sentencepiece",
+  "autoawq"
 ]
 openai = ["openai"]
 transcription = [

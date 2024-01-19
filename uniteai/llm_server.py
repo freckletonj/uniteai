@@ -50,6 +50,7 @@ import llama_cpp
 import queue
 import time
 import traceback
+import os
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'  # note: this isn't relevant to GGUF models
 
@@ -61,8 +62,14 @@ def load_model(args):
     name_or_path = args['model_name_or_path']
     print(f'Loading model: {name_or_path}')
 
+    local_name_or_path = os.path.expanduser(name_or_path)
+    if os.path.exists(local_name_or_path):
+        name_or_path = local_name_or_path
+        print(f'Found local path: {name_or_path}')
+
     # T5
     if 't5' in name_or_path:
+        print('Loading with transformers.T5ForConditionalGeneration')
         from transformers import (
             T5Tokenizer,
             T5ForConditionalGeneration,
@@ -71,10 +78,12 @@ def load_model(args):
         model = T5ForConditionalGeneration.from_pretrained(name_or_path, device_map='auto')
         return tokenizer, model
 
-    # Llama-CPP-Python: GGUF, GPTQ, AWQ
-    elif ('gguf' in name_or_path.lower() or
-          'gptq' in name_or_path.lower() or
-          'awq' in name_or_path.lower()):
+    # Llama-CPP-Python: GGUF
+    elif ('gguf' in name_or_path.lower() # or
+          # 'gptq' in name_or_path.lower() or  # `transformers` handles these fine
+          # 'awq' in name_or_path.lower()  # `transformers` handles these fine
+          ):
+        print('Loading with llama.cpp')
         from llama_cpp import Llama
         model = Llama(
             model_path=name_or_path,
@@ -86,6 +95,7 @@ def load_model(args):
 
     # Transformers (should support many models)
     else:
+        print('Loading with transformers')
         from transformers import (
             AutoTokenizer,
             AutoModelForCausalLM,
@@ -98,24 +108,25 @@ def load_model(args):
         load_in_8bit = {'load_in_8bit': args['load_in_8bit']} if 'load_in_8bit' in args else {}
         load_in_4bit = {'load_in_4bit': args['load_in_4bit']} if 'load_in_4bit' in args else {}
         trust_remote_code = {'trust_remote_code': args['trust_remote_code']} if 'trust_remote_code' in args else {}
+        attn_implementation = {'attn_implementation': args['attn_implementation']} if 'attn_implementation' in args else {}
 
         if 'torch_dtype' in args:
             ty_arg = args['torch_dtype']
-            if ty_arg in {'float16', 'torch.float16'}:
+            if ty_arg in {'f16', 'float16', 'torch.float16'}:
                 torch_dtype = {'torch_dtype': torch.float16}
             elif ty_arg in {'bf16', 'torch.bf16, bfloat16, torch.bfloat16'}:
                 torch_dtype = {'torch_dtype': torch.bfloat16}
-            else:
-                torch_dtype = {}
-
+        else:
+            torch_dtype = {}
 
         model = AutoModelForCausalLM.from_pretrained(
             pretrained_model_name_or_path=name_or_path,
-            **trust_remote_code,  # needed by eg Falcon, and MosaicML
+            **trust_remote_code,
             **revision,
             **device_map,
             **load_in_8bit,
             **load_in_4bit,
+            **attn_implementation,
             **torch_dtype,
         )
         return tokenizer, model
@@ -133,7 +144,8 @@ args = config['local_llm']
 
 class AutocompleteRequest(BaseModel):
     text: str
-    max_length: int = 200
+    # max_length: int = 200
+    max_new_tokens: int = 200
     do_sample: bool = True
     top_k: int = 10
     num_return_sequences: int = 1
@@ -238,7 +250,8 @@ def transformer_stream_(request, streamer, local_llm_stop_event):
         inputs=input_ids,
         attention_mask=attention_mask,
         streamer=streamer,
-        max_length=request.max_length,
+        # max_length=request.max_length,
+        max_new_tokens=request.max_new_tokens,
         do_sample=request.do_sample,
         top_k=request.top_k,
         num_return_sequences=request.num_return_sequences,
@@ -269,8 +282,8 @@ def stream_model_setup(model):
     else:
         streamer = TextIteratorStreamer(
             tokenizer,
-            skip_special_tokens=True,  # eg <|endoftext|>
-            skip_prompt=True,  # don't return prompt
+            skip_prompt=True,  # don't emit original prompt
+            skip_special_tokens=True  # eg <|endoftext|>
         )
         return streamer, transformer_stream_
 

@@ -265,40 +265,14 @@ The reason is that the `lsp_server` lifecycle is (generally*) managed by the tex
 
 `*` you don't have to let the editor manage the `lsp_server`. For instance, `eglot` in emacs allows you to launch it yourself, and then the editor client can just bind to the port.
 
+## Flash Attention
 
-### Falcon LLM Issue:
+Install it with:
 
-If Falcon runs on multiple threads, its cache has an issue. You need a separate `modelling_RW.py` that makes sure it never tries to cache.
-https://github.com/h2oai/h2ogpt/pull/297
-
-Replacing `cos_sim` with this seems to do the trick:
-
-```python
-def cos_sin(
-    self,
-    seq_len: int,
-    device="cuda",
-    dtype=torch.bfloat16,
-) -> torch.Tensor:
-    t = torch.arange(seq_len, device=device).type_as(self.inv_freq)
-    freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-    emb = torch.cat((freqs, freqs), dim=-1).to(device)
-
-    if dtype in [torch.float16, torch.bfloat16]:
-        emb = emb.float()
-
-    cos_cached = emb.cos()[None, :, :]
-    sin_cached = emb.sin()[None, :, :]
-
-    cos_cached = cos_cached.type(dtype)
-    sin_cached = sin_cached.type(dtype)
-
-    return cos_cached, sin_cached
+```sh
+pip install packaging ninja torch
+pip install flash-attn --no-build-isolation
 ```
-
-A separate bitsandbytes issue remains unresolved, but is less serious than the above.
-https://github.com/h2oai/h2ogpt/issues/104
-https://github.com/TimDettmers/bitsandbytes/issues/162
 
 ## License
 

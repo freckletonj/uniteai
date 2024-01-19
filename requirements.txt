@@ -12,6 +12,9 @@ scipy==1.10.1
 transformers==4.30.0
 uvicorn==0.22.0
 llama-cpp-python==0.2.20
+auto-gptq
+optimum
+autoawq
 
 sentencepiece  # needed by T5
 
