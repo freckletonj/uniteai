@@ -100,6 +100,9 @@ local_llm:
   model_name_or_path: 'codellama/CodeLlama-7b-Python-hf'
   model_commit: '51955db0c7f350e799b6cd837e4974017761d79a'
   device_map: 'auto'
+  torch_dtype: "bf16"
+  # attn_implementation: "flash_attention_2"
+
 
   # Falcon params
   max_length: 1000
