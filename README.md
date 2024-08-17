@@ -1,3 +1,9 @@
+> :bulb: **Note:**
+> 
+> This is stil **very much alive**, it's just a solid code base, and as new models come out, upstream deps support them, and then this project doesnt need updates 🫀
+>
+> If you want to add features, this LSP approach is solid, and I'm happy to help, I really think this is (a chunk of) the future of LLM interaction
+
 <p align="center">
   <img width="256" height="256" src="./assets/icon.jpeg" alt='uniteai'>
 </p>
